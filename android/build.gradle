@@ -1,0 +1,59 @@
+allprojects {
+    repositories {
+        google()
+        mavenCentral()
+        maven { url "https://jitpack.io" }
+    }
+}
+
+rootProject.buildDir = "../build"
+subprojects {
+    project.buildDir = "${rootProject.buildDir}/${project.name}"
+    afterEvaluate { project ->
+        if (project.hasProperty('android')) {
+            project.android {
+                compileSdkVersion 35
+                compileOptions {
+                    sourceCompatibility = JavaVersion.VERSION_17
+                    targetCompatibility = JavaVersion.VERSION_17
+                }
+                if (project.android.namespace == null) {
+                    namespace = "com.learnock.${project.name.replace('-', '_')}"
+                }
+                defaultConfig {
+                    targetSdkVersion 35
+                }
+                if (project.plugins.hasPlugin('kotlin-android')) {
+                    kotlinOptions {
+                        jvmTarget = '17'
+                    }
+                }
+            }
+            project.tasks.withType(com.android.build.gradle.tasks.ProcessLibraryManifest).configureEach {
+                doFirst {
+                    def manifestFile = it.mainManifest.get().asFile
+                    if (manifestFile.exists()) {
+                        def content = manifestFile.text
+                        if (content.contains('package=')) {
+                            println "Patching manifest for ${project.name}: removing 'package' attribute"
+                            manifestFile.text = content.replaceFirst(/package="[^"]+"/, '')
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+subprojects {
+    project.evaluationDependsOn(":app")
+    configurations.all {
+        resolutionStrategy {
+            force 'androidx.core:core-ktx:1.13.1'
+            force 'androidx.core:core:1.13.1'
+        }
+    }
+}
+
+tasks.register("clean", Delete) {
+    delete rootProject.buildDir
+}
