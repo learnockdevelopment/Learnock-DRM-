@@ -15,12 +15,12 @@ if (localPropertiesFile.exists()) {
 
 def flutterVersionCode = localProperties.getProperty("flutter.versionCode")
 if (flutterVersionCode == null) {
-    flutterVersionCode = "1"
+    flutterVersionCode = "5"
 }
 
 def flutterVersionName = localProperties.getProperty("flutter.versionName")
 if (flutterVersionName == null) {
-    flutterVersionName = "1.0"
+    flutterVersionName = "5"
 }
 
 def keystoreProperties = new Properties()
@@ -32,7 +32,7 @@ if (keystorePropertiesFile.exists()) {
 android {
     namespace = "com.omran_college.app"
     compileSdk = 36
-    // ndkVersion = "26.1.10909125"
+    ndkVersion = "27.0.12077973"
 
     signingConfigs {
         release {
@@ -63,6 +63,12 @@ android {
     buildTypes {
         release {
             signingConfig = signingConfigs.release
+        }
+    }
+
+    packaging {
+        jniLibs {
+            useLegacyPackaging = false
         }
     }
 }
