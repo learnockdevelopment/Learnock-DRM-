@@ -89,7 +89,11 @@ class DerasyApp extends StatelessWidget {
             }
             if (settings.name == '/material') {
               final args = settings.arguments as Map<String, dynamic>;
-              return MaterialPageRoute(builder: (context) => MaterialViewerScreen(material: args['material'], courseId: args['courseId']));
+              return MaterialPageRoute(builder: (context) => MaterialViewerScreen(
+                material: args['material'], 
+                courseId: args['courseId'],
+                forceLandscape: args['forceLandscape'] ?? false,
+              ));
             }
             return null;
           },

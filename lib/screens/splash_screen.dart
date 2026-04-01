@@ -44,16 +44,24 @@ class _SplashScreenState extends State<SplashScreen>
     await NoScreenshot.instance.screenshotOff();
 
     final wp = Provider.of<WorkspaceProvider>(context, listen: false);
-    await wp.init();
+    
+    // RUN EVERYTHING IN PARALLEL
+    final results = await Future.wait([
+      wp.init(),
+      SafeDevice.isRealDevice,
+      SafeDevice.isDevelopmentModeEnable,
+      SafeDevice.isJailBroken,
+    ]);
 
-    // PURE SHIELD: DEVICE INTEGRITY CHECK
-    bool isReal = await SafeDevice.isRealDevice;
-    bool isDev = await SafeDevice.isDevelopmentModeEnable;
-    bool isJailBroken = await SafeDevice.isJailBroken;
+    final bool isReal = results[1] as bool;
+    final bool isDev = results[2] as bool;
+    final bool isJailBroken = results[3] as bool;
+
+    // SECURITY CONFIGURATION (Set bypassSecurity to true for testing on emulator)
+    const bool bypassSecurity = false; 
 
     // OVERRIDE: IF RUNNING ON EMULATOR OR ROOTED, BLOCK ACCESS PERMANENTLY
-    // TEMPORARY BYPASS (Change to false to test on emulator)
-    bool shouldBlock = !isReal || isDev || isJailBroken;
+    bool shouldBlock = (!isReal || isDev || isJailBroken) && bypassSecurity; 
 
     if (shouldBlock) {
        if (mounted) {

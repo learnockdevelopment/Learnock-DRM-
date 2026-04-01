@@ -202,30 +202,81 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
 
   Future<void> _fetch() async {
     if (!mounted) return;
-    setState(() { _isLoading = true; _dashboardData = null; });
-    try {
-      final wp = Provider.of<WorkspaceProvider>(context, listen: false);
-      final active = wp.activeWorkspace;
-      if (active != null) {
-        await wp.enrichWorkspace(active.id, context);
-      }
-      final data = await wp.getDashboard(); 
-      final favsRes = await wp.getFavorites();
+    
+    final wp = Provider.of<WorkspaceProvider>(context, listen: false);
+    
+    // IF WE HAVE CACHED DATA AND IT IS THE SAME WORKSPACE, USE IT IMMEDIATELY
+    if (wp.isEagerLoaded && wp.cachedDashboard != null) {
+      final cached = wp.cachedDashboard!;
+      final favsRes = wp.cachedFavorites ?? {'favorites': []};
+      final balRes = wp.cachedWallet ?? {'balance': '0.00'};
+      
+      final data = Map<String, dynamic>.from(cached);
       data['favorites_list'] = favsRes['favorites'] ?? [];
       
-      String fetchedBalance = "0.00";
-      try {
-        final balRes = await wp.getWalletBalance();
-        fetchedBalance = (balRes['balance'] ?? balRes['wallet_balance'] ?? "0").toString();
-      } catch (_) {}
+      setState(() {
+        _dashboardData = data;
+        _walletBalanceStr = (balRes['balance'] ?? balRes['wallet_balance'] ?? "0").toString();
+        _isLoading = false;
+      });
+      
+      // OPTIONAL: RE-FETCH IN BACKGROUND TO KEEP IT FRESH WITHOUT SHOWING LOADER
+      _backgroundRefresh();
+      return;
+    }
 
+    setState(() { _isLoading = true; _dashboardData = null; });
+    try {
+      final active = wp.activeWorkspace;
+      
+      // PARALLEL FETCH
+      final futures = [
+        if (active != null) wp.enrichWorkspace(active.id, context),
+        wp.getDashboard(),
+        wp.getFavorites(),
+        wp.getWalletBalance(),
+      ];
+      
+      final results = await Future.wait(futures);
+      final dashboardIdx = active != null ? 1 : 0;
+      final favsIdx = active != null ? 2 : 1;
+      final balIdx = active != null ? 3 : 2;
+
+      final data = Map<String, dynamic>.from(results[dashboardIdx] as Map);
+      final favsRes = results[favsIdx] as Map<String, dynamic>;
+      final balRes = results[balIdx] as Map<String, dynamic>;
+
+      data['favorites_list'] = favsRes['favorites'] ?? [];
+      
       if (mounted) {
-        setState(() { _dashboardData = data; _walletBalanceStr = fetchedBalance; _isLoading = false; });
+        setState(() { 
+          _dashboardData = data; 
+          _walletBalanceStr = (balRes['balance'] ?? balRes['wallet_balance'] ?? "0").toString();
+          _isLoading = false; 
+        });
       }
     } catch (e) {
       debugPrint('Fetch Error: $e');
       if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  Future<void> _backgroundRefresh() async {
+     try {
+       final wp = Provider.of<WorkspaceProvider>(context, listen: false);
+       await wp.eagerLoad(); // This updates the cache
+       if (mounted) {
+         final cached = wp.cachedDashboard;
+         if (cached != null) {
+            final data = Map<String, dynamic>.from(cached);
+            data['favorites_list'] = (wp.cachedFavorites?['favorites'] ?? []);
+            setState(() {
+              _dashboardData = data;
+              _walletBalanceStr = (wp.cachedWallet?['balance'] ?? wp.cachedWallet?['wallet_balance'] ?? "0").toString();
+            });
+         }
+       }
+     } catch (_) {}
   }
 
   @override

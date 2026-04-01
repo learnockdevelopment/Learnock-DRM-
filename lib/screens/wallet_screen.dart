@@ -23,19 +23,31 @@ class _WalletScreenState extends State<WalletScreen> {
   }
 
   Future<void> _fetch() async {
+    final wp = Provider.of<WorkspaceProvider>(context, listen: false);
+    
+    if (wp.isEagerLoaded && wp.cachedDashboard != null && wp.cachedWallet != null) {
+       _applyData(wp.cachedDashboard!, wp.cachedWallet!);
+       return;
+    }
+
     setState(() => _isProcessing = true);
     try {
-      final wp = Provider.of<WorkspaceProvider>(context, listen: false);
-      final data = await wp.getDashboard();
-      String fetchedBalance = "0.00";
-      try {
-        final balRes = await wp.getWalletBalance();
-        fetchedBalance = (balRes['balance'] ?? balRes['wallet_balance'] ?? "0").toString();
-      } catch (_) {}
-
-      if (mounted) setState(() { _dashboardData = data; _walletBalanceStr = fetchedBalance; });
+      final results = await Future.wait([
+        wp.getDashboard(),
+        wp.getWalletBalance(),
+      ]);
+      _applyData(results[0] as Map<String, dynamic>, results[1] as Map<String, dynamic>);
     } catch (_) {}
     if (mounted) setState(() => _isProcessing = false);
+  }
+
+  void _applyData(Map<String, dynamic> dashRes, Map<String, dynamic> balRes) {
+    if (mounted) {
+      setState(() {
+        _dashboardData = dashRes;
+        _walletBalanceStr = (balRes['balance'] ?? balRes['wallet_balance'] ?? "0").toString();
+      });
+    }
   }
 
   void _showResultPrompt({required bool success, String? message}) {

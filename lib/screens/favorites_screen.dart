@@ -26,17 +26,35 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
 
   Future<void> _fetch() async {
     if (!mounted) return;
+    
+    final wp = Provider.of<WorkspaceProvider>(context, listen: false);
+
+    if (wp.isEagerLoaded && wp.cachedFavorites != null && wp.cachedDashboard != null) {
+      _applyData(wp.cachedDashboard!, wp.cachedFavorites!);
+      if (mounted) setState(() { _isLoading = false; _isInit = false; });
+      return;
+    }
+
     setState(() => _isLoading = true);
     try {
-      final wp = Provider.of<WorkspaceProvider>(context, listen: false);
-      final favRes = await wp.getFavorites();
-      final dashRes = await wp.getDashboard();
+      final results = await Future.wait([
+        wp.getFavorites(),
+        wp.getDashboard(),
+      ]);
       
-      final List enrolled = (dashRes['courses'] as List?) ?? [];
-      final Set<int> enrolledIds = enrolled.map((e) => int.tryParse(e['id']?.toString() ?? '0') ?? 0).toSet();
-      
-      final List favs = (favRes['favorites'] as List?) ?? [];
-      
+      _applyData(results[1] as Map<String, dynamic>, results[0] as Map<String, dynamic>);
+    } catch (_) {} finally {
+      if (mounted) setState(() { _isLoading = false; _isInit = false; });
+    }
+  }
+
+  void _applyData(Map<String, dynamic> dashRes, Map<String, dynamic> favRes) {
+    final List enrolled = (dashRes['courses'] as List?) ?? [];
+    final Set<int> enrolledIds = enrolled.map((e) => int.tryParse(e['id']?.toString() ?? '0') ?? 0).toSet();
+    
+    final List favs = (favRes['favorites'] as List?) ?? [];
+    
+    if (mounted) {
       setState(() {
         _favoriteCourses = favs.map((f) {
            final fmap = Map<String, dynamic>.from(f);
@@ -47,8 +65,6 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
            return fmap;
         }).toList();
       });
-    } catch (_) {} finally {
-      if (mounted) setState(() { _isLoading = false; _isInit = false; });
     }
   }
 

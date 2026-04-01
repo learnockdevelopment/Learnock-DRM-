@@ -8,9 +8,22 @@ import 'dart:convert';
 
 class WorkspaceProvider with ChangeNotifier {
   final ApiService _apiService = ApiService();
+  Map<String, dynamic>? _cachedDashboard;
+  Map<String, dynamic>? _cachedFavorites;
+  Map<String, dynamic>? _cachedWallet;
   bool _isInitialized = false;
+  bool _isEagerLoaded = false;
+  final Map<int, Map<String, dynamic>> _lastAccessedMaterials = {};
+
 
   bool get isInitialized => _isInitialized;
+  bool get isEagerLoaded => _isEagerLoaded;
+  Map<String, dynamic>? get cachedDashboard => _cachedDashboard;
+  Map<String, dynamic>? get cachedFavorites => _cachedFavorites;
+  Map<String, dynamic>? get cachedWallet => _cachedWallet;
+  Map<int, Map<String, dynamic>> get lastAccessedMaterials => _lastAccessedMaterials;
+
+
   Workspace? get activeWorkspace => _apiService.activeWorkspace;
   List<Workspace> get workspaces => _apiService.workspaces;
   String get deviceId => _apiService.deviceId;
@@ -19,7 +32,32 @@ class WorkspaceProvider with ChangeNotifier {
     await _apiService.init();
     _isInitialized = true;
     if (activeWorkspace != null) {
-      await enrichWorkspace(activeWorkspace!.id, null);
+      await eagerLoad();
+    }
+    notifyListeners();
+  }
+
+  Future<void> eagerLoad([BuildContext? context]) async {
+    if (activeWorkspace == null) return;
+    
+    _isEagerLoaded = false;
+    // FETCH EVERYTHING SIMULTANEOUSLY
+    final futures = [
+      enrichWorkspace(activeWorkspace!.id, context),
+      getDashboard(),
+      getFavorites(),
+      getWalletBalance(),
+    ];
+
+    try {
+      final results = await Future.wait(futures);
+      _cachedDashboard = results[1] as Map<String, dynamic>;
+      _cachedFavorites = results[2] as Map<String, dynamic>;
+      _cachedWallet = results[3] as Map<String, dynamic>;
+      _isEagerLoaded = true;
+      debugPrint('🚀 EAGER LOAD COMPLETE: All data cached.');
+    } catch (e) {
+      debugPrint('❌ Eager Load Error: $e');
     }
     notifyListeners();
   }
@@ -123,7 +161,7 @@ class WorkspaceProvider with ChangeNotifier {
     }
     
     await _apiService.switchWorkspace(id);
-    await enrichWorkspace(id, context);
+    await eagerLoad(context);
     notifyListeners();
   }
 
@@ -140,7 +178,12 @@ class WorkspaceProvider with ChangeNotifier {
   Future<Map<String, dynamic>> getDashboard() => _apiService.getDashboard();
   Future<Map<String, dynamic>> getCourse(int id) => _apiService.getCourse(id);
   Future<Map<String, dynamic>> getPlayback(String code) => _apiService.getPlayback(code);
-  Future<void> markProgress(int courseId, int materialId) => _apiService.markProgress(courseId, materialId);
+  Future<void> markProgress(int courseId, Map<String, dynamic> material) async {
+    final materialId = int.tryParse(material['id']?.toString() ?? '0') ?? 0;
+    if (materialId != 0) await _apiService.markProgress(courseId, materialId);
+    _lastAccessedMaterials[courseId] = material;
+    notifyListeners();
+  }
   Future<Map<String, dynamic>> toggleFavorite(int courseId) => _apiService.toggleFavorite(courseId);
   Future<Map<String, dynamic>> getFavorites() => _apiService.getFavorites();
 

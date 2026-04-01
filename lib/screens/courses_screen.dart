@@ -26,38 +26,49 @@ class _CoursesScreenState extends State<CoursesScreen> {
 
   Future<void> _fetch() async {
     if (!mounted) return;
+    
+    final wp = Provider.of<WorkspaceProvider>(context, listen: false);
+
+    if (wp.isEagerLoaded && wp.cachedDashboard != null && wp.cachedFavorites != null) {
+      _applyData(wp.cachedDashboard!, wp.cachedFavorites!);
+      if (mounted) setState(() { _isLoading = false; _isInit = false; });
+      return;
+    }
+
     setState(() => _isLoading = true);
     try {
-      final wp = Provider.of<WorkspaceProvider>(context, listen: false);
-      final dashRes = await wp.getDashboard();
-      final List apiCourses = (dashRes['courses'] as List?) ?? [];
-      final List allCoursesRaw = (dashRes['all_courses'] as List?) ?? json.decode(wp.activeWorkspace?.latestCoursesJson ?? '[]');
-      
-      final List enrolledCourses = apiCourses.map((c) {
-        final map = Map<String, dynamic>.from(c);
-        map['enrolled'] = true;
-        return map;
-      }).toList();
-      
-      final Set<int> enrolledIds = enrolledCourses.map((c) => int.tryParse(c['id']?.toString() ?? '0') ?? 0).toSet();
+      final results = await Future.wait([
+        wp.getDashboard(),
+        wp.getFavorites(),
+      ]);
+      _applyData(results[0] as Map<String, dynamic>, results[1] as Map<String, dynamic>);
+    } catch (_) {} finally {
+      if (mounted) setState(() { _isLoading = false; _isInit = false; });
+    }
+  }
 
-      final favsRes = await wp.getFavorites();
-      final List favoritesList = (favsRes['favorites'] as List?) ?? [];
-      final Set<int> favoriteIds = favoritesList.map((f) => int.tryParse(f['id']?.toString() ?? '0') ?? 0).toSet();
-      
+  void _applyData(Map<String, dynamic> dashRes, Map<String, dynamic> favRes) {
+    final wp = Provider.of<WorkspaceProvider>(context, listen: false);
+    final List apiCourses = (dashRes['courses'] as List?) ?? [];
+    final List allCoursesRaw = (dashRes['all_courses'] as List?) ?? json.decode(wp.activeWorkspace?.latestCoursesJson ?? '[]');
+    
+    final Set<int> enrolledIds = apiCourses.map((c) => int.tryParse(c['id']?.toString() ?? '0') ?? 0).toSet();
+    final List favoritesList = (favRes['favorites'] as List?) ?? [];
+    final Set<int> favoriteIds = favoritesList.map((f) => int.tryParse(f['id']?.toString() ?? '0') ?? 0).toSet();
+    
+    if (mounted) {
       setState(() {
         _availableCourses = allCoursesRaw.map((c) {
           final map = Map<String, dynamic>.from(c);
           final cid = int.tryParse(map['id']?.toString() ?? '0') ?? 0;
           map['is_favorite'] = favoriteIds.contains(cid);
+          map['enrolled'] = enrolledIds.contains(cid);
           return map;
         }).where((c) {
           final cid = int.tryParse(c['id']?.toString() ?? '0') ?? 0;
           return !enrolledIds.contains(cid) && cid > 0;
         }).toList();
       });
-    } catch (_) {} finally {
-      if (mounted) setState(() { _isLoading = false; _isInit = false; });
     }
   }
 

@@ -171,20 +171,22 @@ class ApiService {
   }
 
   Future<Map<String, dynamic>> getDashboard() async {
-    final statsRes = await _request('GET', '/dashboard/stats');
-    try {
-      final coursesRes = await _request('GET', '/dashboard/courses');
-      statsRes['courses'] = coursesRes['courses'] ?? [];
-    } catch (_) {
-      statsRes['courses'] = [];
-    }
-    try {
-      final allRes = await _request('GET', '/courses');
-      statsRes['all_courses'] = allRes['courses'] ?? [];
-      statsRes['categories'] = allRes['categories'] ?? [];
-    } catch (_) {
-      statsRes['all_courses'] = [];
-    }
+    final futures = [
+      _request('GET', '/dashboard/stats'),
+      _request('GET', '/dashboard/courses').catchError((_) => {'courses': []}),
+      _request('GET', '/courses').catchError((_) => {'courses': [], 'categories': []}),
+    ];
+
+    final results = await Future.wait(futures);
+    
+    final statsRes = Map<String, dynamic>.from(results[0]);
+    final coursesRes = results[1] as Map<String, dynamic>;
+    final allRes = results[2] as Map<String, dynamic>;
+
+    statsRes['courses'] = coursesRes['courses'] ?? [];
+    statsRes['all_courses'] = allRes['courses'] ?? [];
+    statsRes['categories'] = allRes['categories'] ?? [];
+    
     return statsRes;
   }
 
