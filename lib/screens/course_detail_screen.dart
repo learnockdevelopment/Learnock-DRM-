@@ -5,6 +5,7 @@ import 'package:learnock_drm/providers/language_provider.dart';
 import 'package:learnock_drm/providers/theme_provider.dart';
 import 'package:learnock_drm/widgets/premium_loader.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
+import 'package:flutter_widget_from_html_core/flutter_widget_from_html_core.dart';
 
 class CourseDetailScreen extends StatefulWidget {
   final int courseId;
@@ -135,11 +136,9 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
         ),
         Padding(
           padding: const EdgeInsetsDirectional.only(start: 4),
-          child: Text(
+          child: HtmlWidget(
             description,
-            style: TextStyle(color: Colors.white.withOpacity(0.35), fontSize: 12, height: 1.6, fontWeight: FontWeight.w500),
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
+            textStyle: TextStyle(color: Colors.white.withOpacity(0.35), fontSize: 12, height: 1.6, fontWeight: FontWeight.w500),
           ),
         ),
         const SizedBox(height: 12),
@@ -159,12 +158,32 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
     final onSurface = Theme.of(context).colorScheme.onSurface;
     final materials = (course?['materials'] as List?) ?? [];
 
+    // ROBUST CATEGORY DETECTION (PRIORITIZE STRINGS OVER IDS)
+    String catStr = "";
+    if (course != null) {
+      final catCandidates = [course['category_name'], course['category'], course['subject'], course['cat_name']];
+      for (var c in catCandidates) {
+        if (c == null) continue;
+        if (c is Map) {
+          final n = (c['name'] ?? c['title'] ?? "").toString().trim();
+          if (n.isNotEmpty) { catStr = n; break; }
+        } else {
+          final s = c.toString().trim();
+          if (s.isNotEmpty && int.tryParse(s) == null) { catStr = s; break; }
+        }
+      }
+    }
+
     if (_isLoading) return const Scaffold(backgroundColor: Color(0xFF000000), body: Center(child: PremiumLoader()));
     if (course == null) return Scaffold(backgroundColor: const Color(0xFF000000), body: Center(child: Text(lang.translate('failure'), style: const TextStyle(color: Colors.white24))));
 
     // CONTINUE LEARNING LOGIC
     final lastAccessed = wp.lastAccessedMaterials[widget.courseId];
     final Map<String, dynamic> targetMaterial = lastAccessed ?? (materials.isNotEmpty ? materials[0] : {});
+    
+    // FIND NEXT FOR CONTINUE BUTTON
+    final int targetIndex = materials.indexWhere((m) => (m['id'] ?? m['id_material']) == (targetMaterial['id'] ?? targetMaterial['id_material']));
+    final nextMat = (targetIndex != -1 && targetIndex + 1 < materials.length) ? materials[targetIndex + 1] : null;
 
     return Scaffold(
       backgroundColor: const Color(0xFF000000),
@@ -205,6 +224,18 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
             sliver: SliverList(
               delegate: SliverChildListDelegate([
                 const SizedBox(height: 10),
+                if (catStr.isNotEmpty) ...[
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(color: primaryColor.withOpacity(0.1), borderRadius: BorderRadius.circular(6), border: Border.all(color: primaryColor.withOpacity(0.2))),
+                        child: Text(catStr.toUpperCase(), style: TextStyle(color: primaryColor, fontSize: 8, fontWeight: FontWeight.w900, letterSpacing: 1)),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                ],
                 Text(
                   course['title'] ?? '',
                   style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w900, letterSpacing: -0.5),
@@ -235,7 +266,8 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
                        Navigator.pushNamed(context, '/material', arguments: {
                           'material': targetMaterial, 
                           'courseId': widget.courseId,
-                          'forceLandscape': type == 'video' || type == 'mp4'
+                          'forceLandscape': type == 'video' || type == 'mp4',
+                          'nextMaterial': nextMat
                        });
                     },
                     style: ElevatedButton.styleFrom(
@@ -291,9 +323,9 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
                 ),
                 const SizedBox(height: 32),
                 
-                Text(
+                HtmlWidget(
                   course['description'] ?? 'Expand your technical expertise with our world-class academy instructors.',
-                  style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 14, height: 1.6, fontWeight: FontWeight.w500),
+                  textStyle: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 14, height: 1.6, fontWeight: FontWeight.w500),
                 ),
                 const SizedBox(height: 24),
                 
@@ -370,7 +402,67 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
               ),
             ),
           ),
-          const SliverToBoxAdapter(child: SizedBox(height: 100)),
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(24, 40, 24, 100),
+              child: InkWell(
+                onTap: () async {
+                  final confirm = await showDialog<bool>(
+                    context: context,
+                    builder: (c) => AlertDialog(
+                      backgroundColor: const Color(0xFF1A1A1A),
+                      title: const Text("UNENROLL FROM COURSE", style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w900, letterSpacing: 1.5)),
+                      content: const Text("Your learning progress will be saved, but you will lose instant access until you re-subscribe.", style: TextStyle(color: Colors.white60, fontSize: 12, height: 1.5)),
+                      actions: [
+                        TextButton(onPressed: () => Navigator.pop(c, false), child: const Text("CANCEL", style: TextStyle(color: Colors.white24, fontSize: 10, fontWeight: FontWeight.w900))),
+                        TextButton(
+                          onPressed: () => Navigator.pop(c, true), 
+                          child: const Text("UNENROLL", style: TextStyle(color: Colors.redAccent, fontSize: 10, fontWeight: FontWeight.w900)),
+                        ),
+                      ],
+                    ),
+                  );
+
+                  if (confirm == true) {
+                    try {
+                      await wp.unenroll(widget.courseId);
+                      await wp.eagerLoad(); // Refresh local cache
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Unenrolled successfully"), backgroundColor: Colors.orange));
+                        Navigator.pushReplacementNamed(context, '/dashboard');
+                      }
+                    } catch (e) {
+                      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString()), backgroundColor: Colors.red));
+                    }
+                  }
+                },
+                borderRadius: BorderRadius.circular(20),
+                child: Container(
+                  padding: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    color: Colors.redAccent.withOpacity(0.05),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: Colors.redAccent.withOpacity(0.1)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.logout_rounded, color: Colors.redAccent, size: 20),
+                      const SizedBox(width: 16),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text("STOP LEARNING", style: TextStyle(color: Colors.redAccent, fontSize: 13, fontWeight: FontWeight.w900)),
+                          Text("Unenroll from this course", style: TextStyle(color: Colors.redAccent.withOpacity(0.4), fontSize: 10, fontWeight: FontWeight.w600)),
+                        ],
+                      ),
+                      const Spacer(),
+                      const Icon(Icons.arrow_forward_ios_rounded, color: Colors.redAccent, size: 10),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
         ],
       ),
     );

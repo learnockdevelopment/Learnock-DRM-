@@ -5,6 +5,7 @@ import 'package:learnock_drm/providers/language_provider.dart';
 import 'dart:convert';
 import 'dart:io' as io;
 import 'package:learnock_drm/widgets/premium_loader.dart';
+import 'package:flutter_widget_from_html_core/flutter_widget_from_html_core.dart';
 
 class CoursesScreen extends StatefulWidget {
   const CoursesScreen({super.key});
@@ -61,12 +62,17 @@ class _CoursesScreenState extends State<CoursesScreen> {
         _availableCourses = allCoursesRaw.map((c) {
           final map = Map<String, dynamic>.from(c);
           final cid = int.tryParse(map['id']?.toString() ?? '0') ?? 0;
+          
+          final dynamic e = map['enrolled'] ?? map['is_enrolled'] ?? map['is_purchased'] ?? map['is_admitted'] ?? map['isEnrolled'] ?? enrolledIds.contains(cid);
+          final bool alreadyEnrolledByFlag = e == true || e == 1 || e == '1' || e == 'true';
+          map['enrolled'] = alreadyEnrolledByFlag; 
+          
           map['is_favorite'] = favoriteIds.contains(cid);
-          map['enrolled'] = enrolledIds.contains(cid);
           return map;
         }).where((c) {
           final cid = int.tryParse(c['id']?.toString() ?? '0') ?? 0;
-          return !enrolledIds.contains(cid) && cid > 0;
+          final bool alreadyEnrolled = enrolledIds.contains(cid) || (c['enrolled'] == true);
+          return !alreadyEnrolled && cid > 0;
         }).toList();
       });
     }
@@ -272,7 +278,7 @@ class _CoursesScreenState extends State<CoursesScreen> {
       ),
       child: InkWell(
         onTap: () {
-          final e = course['enrolled'];
+          final dynamic e = course['enrolled'] ?? course['is_enrolled'] ?? course['is_purchased'] ?? course['is_admitted'] ?? course['isEnrolled'];
           final isEnrolled = e == true || e == 1 || e == '1' || e == 'true';
           final cid = int.tryParse(course['id']?.toString() ?? '0') ?? 0;
           if (!isEnrolled) {
@@ -330,9 +336,9 @@ class _CoursesScreenState extends State<CoursesScreen> {
                   ],
                   Text(course['title'] ?? '', style: TextStyle(color: onSurface, fontSize: 16, fontWeight: FontWeight.w900, letterSpacing: -0.2)),
                   const SizedBox(height: 8),
-                  Text(
+                  HtmlWidget(
                     course['description'] ?? '', 
-                    style: TextStyle(color: onSurface.withOpacity(0.6), fontSize: 13, height: 1.5, fontWeight: FontWeight.bold)
+                    textStyle: TextStyle(color: onSurface.withOpacity(0.6), fontSize: 13, height: 1.5, fontWeight: FontWeight.bold),
                   ), // NO TRUNCATION
                   const SizedBox(height: 20),
                   Row(

@@ -43,7 +43,7 @@ void main() async {
 }
 
 class DerasyApp extends StatelessWidget {
-  const DerasyApp({super.key});
+  const DerasyApp({super.key}); 
 
   @override
   Widget build(BuildContext context) {
@@ -93,6 +93,7 @@ class DerasyApp extends StatelessWidget {
                 material: args['material'], 
                 courseId: args['courseId'],
                 forceLandscape: args['forceLandscape'] ?? false,
+                nextMaterial: args['nextMaterial'],
               ));
             }
             return null;

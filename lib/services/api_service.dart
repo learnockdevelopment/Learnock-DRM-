@@ -113,28 +113,30 @@ class ApiService {
     }
 
     http.Response response;
-    if (method == 'POST') {
-      print('>>> POST $uri');
-      print('>>> Headers: $headers');
-      print('>>> Body: $body');
-      response = await http.post(uri, headers: headers, body: json.encode(body));
-    } else {
-      print('>>> GET $uri');
-      print('>>> Headers: $headers');
-      response = await http.get(uri, headers: headers);
+    int retryCount = 0;
+    while (true) {
+      try {
+        if (method == 'POST') {
+          print('>>> POST $uri');
+          response = await http.post(uri, headers: headers, body: json.encode(body)).timeout(const Duration(seconds: 20));
+        } else {
+          print('>>> GET $uri');
+          response = await http.get(uri, headers: headers).timeout(const Duration(seconds: 20));
+        }
+        break; // Success
+      } catch (e) {
+        retryCount++;
+        if (retryCount >= 3 || method == 'POST') rethrow; // Don't retry POSTs to avoid duplicate actions
+        print('>>> Retry $retryCount due to: $e');
+        await Future.delayed(Duration(seconds: retryCount));
+      }
     }
 
     print('<<< Status: ${response.statusCode}');
-    print('<<< Body: ${response.body}');
-
-    if (response.statusCode == 401) {
-      throw Exception('Session expired');
-    }
+    if (response.statusCode == 401) throw Exception('Session expired');
 
     final data = json.decode(response.body);
-    if (response.statusCode >= 400) {
-      throw Exception(data['error'] ?? data['message'] ?? 'API Error');
-    }
+    if (response.statusCode >= 400) throw Exception(data['error'] ?? data['message'] ?? 'API Error');
     return data;
   }
 
@@ -168,6 +170,11 @@ class ApiService {
 
   Future<Map<String, dynamic>> getPlayback(String code) async {
     return await _request('GET', '/courses/playback/$code');
+  }
+
+  // REVISED FLOW: /api/courses/[id]/learn
+  Future<Map<String, dynamic>> getCourseLearn(int id) async {
+    return await _request('GET', '/courses/$id/learn');
   }
 
   Future<Map<String, dynamic>> getDashboard() async {
@@ -228,11 +235,48 @@ class ApiService {
     return await _request('POST', '/checkout/wallet', body: {'courseId': courseId});
   }
 
+  // REVISED FLOW: /api/courses/unenroll
+  Future<Map<String, dynamic>> unenroll(int courseId) async {
+    return await _request('POST', '/courses/unenroll', body: {'courseId': courseId});
+  }
+
   Future<Map<String, dynamic>> getWalletTransactions() async {
     return await _request('GET', '/wallet/transactions');
   }
 
   Future<Map<String, dynamic>> getWalletBalance() async {
     return await _request('GET', '/wallet/status');
+  }
+
+  // REVISED FLOW: /api/categories
+  Future<Map<String, dynamic>> getCategories() async {
+    return await _request('GET', '/categories');
+  }
+
+  // REVISED FLOW: /api/quizzes/[id]/submit
+  Future<Map<String, dynamic>> submitQuiz(int quizId, dynamic results) async {
+    return await _request('POST', '/quizzes/$quizId/submit', body: {'results': results});
+  }
+
+  // REVISED FLOW: /api/courses/[id]/reviews
+  Future<Map<String, dynamic>> getReviews(int courseId) async {
+    return await _request('GET', '/courses/$courseId/reviews');
+  }
+
+  Future<Map<String, dynamic>> submitReview(int courseId, int rating, String comment) async {
+    return await _request('POST', '/courses/$courseId/reviews', body: {
+      'rating': rating,
+      'comment': comment,
+    });
+  }
+
+  // REVISED FLOW: /api/imagekit/auth
+  Future<Map<String, dynamic>> getImageKitAuth() async {
+    return await _request('GET', '/imagekit/auth');
+  }
+
+  // REVISED FLOW: /api/schedule
+  Future<Map<String, dynamic>> getSchedule() async {
+    return await _request('GET', '/schedule');
   }
 }

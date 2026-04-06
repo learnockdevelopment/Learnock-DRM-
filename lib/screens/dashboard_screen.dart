@@ -8,6 +8,7 @@ import 'package:learnock_drm/widgets/premium_loader.dart';
 import 'package:learnock_drm/models/workspace.dart';
 import 'dart:convert';
 import 'dart:io' as io;
+import 'package:flutter_widget_from_html_core/flutter_widget_from_html_core.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -316,11 +317,18 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
     final List availableCourses = allCoursesRaw.map((c) {
       final map = Map<String, dynamic>.from(c);
       final cid = int.tryParse(map['id']?.toString() ?? '0') ?? 0;
+      
+      // Check for any implicit enrollment flags from metadata
+      final dynamic e = map['enrolled'] ?? map['is_enrolled'] ?? map['is_purchased'] ?? map['is_admitted'] ?? map['isEnrolled'];
+      final bool alreadyEnrolledByFlag = e == true || e == 1 || e == '1' || e == 'true';
+      map['enrolled'] = alreadyEnrolledByFlag; 
+      
       map['is_favorite'] = favoriteIds.contains(cid);
       return map;
     }).where((c) {
       final cid = int.tryParse(c['id']?.toString() ?? '0') ?? 0;
-      return !enrolledIds.contains(cid) && cid > 0;
+      final bool alreadyEnrolled = enrolledIds.contains(cid) || (c['enrolled'] == true);
+      return !alreadyEnrolled && cid > 0;
     }).toList();
     
     final Map<String, dynamic> stats = rawData['stats'] is Map ? rawData['stats'] : {};
@@ -366,41 +374,95 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
                 Padding(
                   padding: const EdgeInsets.fromLTRB(20, 48, 20, 24), // MOVED DOWN
                   child: Container(
-                    padding: const EdgeInsets.all(16),
+                    padding: const EdgeInsets.fromLTRB(20, 24, 20, 24),
                     decoration: BoxDecoration(
                       color: Theme.of(context).cardColor,
-                      borderRadius: BorderRadius.circular(24),
-                      border: Border.all(color: primaryColor.withOpacity(0.2), width: 2), // BORDERED BOX
-                      boxShadow: [BoxShadow(color: primaryColor.withOpacity(0.1), blurRadius: 30, spreadRadius: -10)],
+                      borderRadius: BorderRadius.circular(32),
+                      border: Border.all(color: primaryColor.withOpacity(0.08), width: 1),
+                      boxShadow: [
+                        BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 40, offset: const Offset(0, 10)),
+                        BoxShadow(color: primaryColor.withOpacity(0.05), blurRadius: 20, spreadRadius: -5),
+                      ],
                     ),
-                    child: Row(
+                    child: Column(
                       children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text("${lang.translate('welcome_to')} ${workspace?.studentName ?? 'Student'}", style: TextStyle(color: onSurface, fontSize: 24, fontWeight: FontWeight.w900, letterSpacing: -0.8)),
-                              const SizedBox(height: 8),
-                              Row(
+                        Row(
+                          children: [
+                            // STUDENT AVATAR / INITIALS
+                            Container(
+                              width: 64, height: 64,
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(colors: [primaryColor, primaryColor.withOpacity(0.7)], begin: Alignment.topLeft, end: Alignment.bottomRight),
+                                borderRadius: BorderRadius.circular(20),
+                                boxShadow: [BoxShadow(color: primaryColor.withOpacity(0.3), blurRadius: 15, offset: const Offset(0, 8))],
+                              ),
+                              child: Center(
+                                child: Text(
+                                  (workspace?.studentName ?? 'S').substring(0, 1).toUpperCase(),
+                                  style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w900),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 20),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  if (workspace?.logoUrl != null)
-                                    Container(
-                                      width: 24, height: 24,
-                                      padding: const EdgeInsets.all(2),
-                                      decoration: BoxDecoration(color: Colors.white, shape: BoxShape.circle, border: Border.all(color: primaryColor.withOpacity(0.1), width: 1)),
-                                      child: ClipRRect(borderRadius: BorderRadius.circular(12), child: Image.network(workspace!.logoUrl!, fit: BoxFit.contain, errorBuilder: (c,e,s) => Icon(Icons.school_rounded, color: primaryColor, size: 12))),
-                                    ),
-                                  const SizedBox(width: 8),
-                                  Text(workspace?.name ?? 'Academy', style: TextStyle(color: primaryColor, fontSize: 13, fontWeight: FontWeight.w900, letterSpacing: 0.5)),
+                                  Text(
+                                    "${lang.translate('welcome_back')},", 
+                                    style: TextStyle(color: onSurface.withOpacity(0.5), fontSize: 13, fontWeight: FontWeight.w700, letterSpacing: 0.5)
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    workspace?.studentName ?? 'Student', 
+                                    style: TextStyle(color: onSurface, fontSize: 26, fontWeight: FontWeight.w900, letterSpacing: -0.5, height: 1.1)
+                                  ),
                                 ],
                               ),
+                            ),
+                            Container(
+                              decoration: BoxDecoration(color: onSurface.withOpacity(0.05), borderRadius: BorderRadius.circular(16)),
+                              child: IconButton(
+                                onPressed: () => _scaffoldKey.currentState?.openDrawer(), 
+                                icon: Icon(Icons.grid_view_rounded, color: onSurface.withOpacity(0.7), size: 22)
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 24),
+                        // ACADEMY BADGE & PROGRESS QUICK VIEW
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: onSurface.withOpacity(0.03),
+                            borderRadius: BorderRadius.circular(24),
+                            border: Border.all(color: onSurface.withOpacity(0.05)),
+                          ),
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 32, height: 32,
+                                decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(16),
+                                  child: workspace?.logoUrl != null 
+                                    ? Image.network(workspace!.logoUrl!, fit: BoxFit.contain, errorBuilder: (c,e,s) => Icon(Icons.school_rounded, color: primaryColor, size: 16))
+                                    : Icon(Icons.school_rounded, color: primaryColor, size: 16),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(workspace?.name ?? 'Academy', style: TextStyle(color: onSurface, fontSize: 13, fontWeight: FontWeight.w900)),
+                                    Text(lang.translate('active_now'), style: TextStyle(color: Colors.green, fontSize: 10, fontWeight: FontWeight.w700)),
+                                  ],
+                                ),
+                              ),
+                              Icon(Icons.arrow_forward_ios_rounded, color: onSurface.withOpacity(0.2), size: 14),
                             ],
                           ),
-                        ),
-                        
-                        Container(
-                          decoration: BoxDecoration(color: primaryColor.withOpacity(0.1), shape: BoxShape.circle),
-                          child: IconButton(onPressed: () => _scaffoldKey.currentState?.openDrawer(), icon: Icon(Icons.menu_rounded, color: primaryColor, size: 24)),
                         ),
                       ],
                     ),
@@ -535,7 +597,10 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
           const SizedBox(height: 16),
           Text(feat['title'] ?? '', style: TextStyle(color: onSurface, fontSize: 14, fontWeight: FontWeight.w900, height: 1.2)), // NO TRUNCATION
           const SizedBox(height: 8),
-          Text(feat['description'] ?? '', style: TextStyle(color: onSurface.withOpacity(0.4), fontSize: 11, fontWeight: FontWeight.bold)), // NO TRUNCATION
+          HtmlWidget(
+            feat['description'] ?? '', 
+            textStyle: TextStyle(color: onSurface.withOpacity(0.4), fontSize: 11, fontWeight: FontWeight.bold),
+          ), // NO TRUNCATION
         ],
       ),
     );
@@ -583,12 +648,26 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
     final onSurface = Theme.of(context).colorScheme.onSurface;
     final progress = double.tryParse(course['progress']?.toString() ?? '0') ?? 0;
     
+    // ROBUST CATEGORY DETECTION (PRIORITIZE STRINGS OVER IDS)
+    String catStr = "";
+    final catCandidates = [course['category_name'], course['category'], course['subject'], course['cat_name']];
+    for (var c in catCandidates) {
+      if (c == null) continue;
+      if (c is Map) {
+        final n = (c['name'] ?? c['title'] ?? "").toString().trim();
+        if (n.isNotEmpty) { catStr = n; break; }
+      } else {
+        final s = c.toString().trim();
+        if (s.isNotEmpty && int.tryParse(s) == null) { catStr = s; break; }
+      }
+    }
+    
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(color: Theme.of(context).cardColor, borderRadius: BorderRadius.circular(24), border: Border.all(color: Theme.of(context).dividerColor, width: 1.5)),
       child: InkWell(
         onTap: () {
-          final e = course['enrolled'];
+          final dynamic e = course['enrolled'] ?? course['is_enrolled'] ?? course['is_purchased'] ?? course['is_admitted'] ?? course['isEnrolled'];
           final isEnrolled = e == true || e == 1 || e == '1' || e == 'true';
           final cid = int.tryParse(course['id']?.toString() ?? '0') ?? 0;
           if (!isEnrolled) {
@@ -607,8 +686,8 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
                   ClipRRect(borderRadius: BorderRadius.circular(16), child: Image.network(course['thumbnail_url'] ?? 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=800&q=80', width: 60, height: 60, fit: BoxFit.cover, errorBuilder: (c,e,s) => Container(width: 60, height: 60, color: Theme.of(context).dividerColor, child: const Icon(Icons.school_rounded, size: 24)))),
                   const SizedBox(width: 12),
                   Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    if (course['category'] != null && course['category'].toString().isNotEmpty) ...[
-                      Text(course['category'].toString().toUpperCase(), style: TextStyle(color: wsColor, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 0.5)),
+                    if (catStr.isNotEmpty) ...[
+                      Text(catStr.toUpperCase(), style: TextStyle(color: wsColor, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 0.5)),
                       const SizedBox(height: 2),
                     ],
                     Text(course['title'] ?? '', style: TextStyle(color: onSurface, fontSize: 14, fontWeight: FontWeight.w900), maxLines: 1, overflow: TextOverflow.ellipsis),
@@ -617,7 +696,13 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
                       Text("${course['total_materials'] ?? 0} ${lang.translate('materials_count')}", style: TextStyle(color: wsColor, fontSize: 11, fontWeight: FontWeight.w900)),
                     ] else ...[
                       const SizedBox(height: 4),
-                      Text(course['description'] ?? '', style: TextStyle(color: onSurface.withOpacity(0.5), fontSize: 11), maxLines: 1, overflow: TextOverflow.ellipsis),
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(maxHeight: 32),
+                        child: HtmlWidget(
+                          course['description'] ?? '', 
+                          textStyle: TextStyle(color: onSurface.withOpacity(0.5), fontSize: 11, height: 1.2, overflow: TextOverflow.ellipsis),
+                        ),
+                      ),
                     ],
                   ])),
                   InkWell(

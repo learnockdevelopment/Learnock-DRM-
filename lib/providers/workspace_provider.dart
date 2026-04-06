@@ -3,7 +3,7 @@ import 'package:learnock_drm/models/workspace.dart';
 import 'package:learnock_drm/providers/theme_provider.dart';
 import 'package:learnock_drm/services/api_service.dart';
 import 'package:provider/provider.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:url_launcher/url_launcher.dart' as launcher;
 import 'dart:convert';
 
 class WorkspaceProvider with ChangeNotifier {
@@ -177,27 +177,39 @@ class WorkspaceProvider with ChangeNotifier {
 
   Future<Map<String, dynamic>> getDashboard() => _apiService.getDashboard();
   Future<Map<String, dynamic>> getCourse(int id) => _apiService.getCourse(id);
+  Future<Map<String, dynamic>> getCourseLearn(int id) => _apiService.getCourseLearn(id);
   Future<Map<String, dynamic>> getPlayback(String code) => _apiService.getPlayback(code);
+  
   Future<void> markProgress(int courseId, Map<String, dynamic> material) async {
     final materialId = int.tryParse(material['id']?.toString() ?? '0') ?? 0;
     if (materialId != 0) await _apiService.markProgress(courseId, materialId);
     _lastAccessedMaterials[courseId] = material;
     notifyListeners();
   }
+  
   Future<Map<String, dynamic>> toggleFavorite(int courseId) => _apiService.toggleFavorite(courseId);
   Future<Map<String, dynamic>> getFavorites() => _apiService.getFavorites();
 
   Future<Map<String, dynamic>> redeemCoupon(String code) => _apiService.redeemCoupon(code);
   Future<Map<String, dynamic>> redeemVoucher(String code) => _apiService.redeemVoucher(code);
   Future<Map<String, dynamic>> checkoutWallet(int courseId) => _apiService.checkoutWallet(courseId);
+  Future<Map<String, dynamic>> unenroll(int courseId) => _apiService.unenroll(courseId);
+  
   Future<Map<String, dynamic>> getWalletTransactions() => _apiService.getWalletTransactions();
   Future<Map<String, dynamic>> getWalletBalance() => _apiService.getWalletBalance();
+  
+  Future<Map<String, dynamic>> getCategories() => _apiService.getCategories();
+  Future<Map<String, dynamic>> submitQuiz(int quizId, dynamic results) => _apiService.submitQuiz(quizId, results);
+  Future<Map<String, dynamic>> getReviews(int courseId) => _apiService.getReviews(courseId);
+  Future<Map<String, dynamic>> submitReview(int courseId, int rating, String comment) => _apiService.submitReview(courseId, rating, comment);
+  Future<Map<String, dynamic>> getImageKitAuth() => _apiService.getImageKitAuth();
+  Future<Map<String, dynamic>> getSchedule() => _apiService.getSchedule();
 
   Future<void> launchUrl(String url) async {
     final uri = Uri.parse(url);
     try {
-      if (await canLaunchUrl(uri)) {
-        await launchUrl(url);
+      if (await launcher.canLaunchUrl(uri)) {
+        await launcher.launchUrl(uri, mode: launcher.LaunchMode.externalApplication);
       }
     } catch (e) {
       debugPrint('Error launching URL: $e');

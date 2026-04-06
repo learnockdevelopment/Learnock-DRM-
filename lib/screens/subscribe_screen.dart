@@ -71,7 +71,17 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
                         ? await wp.redeemVoucher(controller.text)
                         : await wp.redeemCoupon(controller.text);
                     sm.showSnackBar(SnackBar(content: Text(res['message'] ?? 'Success!'), backgroundColor: Colors.green));
-                    nav.pushReplacementNamed('/dashboard');
+                    
+                    await wp.eagerLoad();
+                    
+                    if (mounted) {
+                      if (isVoucher) {
+                        nav.pushReplacementNamed('/dashboard');
+                      } else {
+                        final cid = int.tryParse(widget.course['id']?.toString() ?? '0') ?? 0;
+                        nav.pushReplacementNamed('/course', arguments: cid);
+                      }
+                    }
                   } catch (e) {
                     sm.showSnackBar(SnackBar(content: Text(e.toString()), backgroundColor: Colors.red));
                   } finally {
@@ -98,14 +108,33 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
     final nav = Navigator.of(context);
     final sm = ScaffoldMessenger.of(context);
     
+    if (_isProcessing) return; // Prevent double trigger
+    
     setState(() => _isProcessing = true);
     try {
       final cid = int.tryParse(widget.course['id']?.toString() ?? '0') ?? 0;
       final res = await wp.checkoutWallet(cid);
       sm.showSnackBar(SnackBar(content: Text(res['message'] ?? 'Enrolled successfully!'), backgroundColor: Colors.green));
-      nav.pushReplacementNamed('/dashboard');
+      
+      // Update global cache to reflect enrollment
+      await wp.eagerLoad();
+      
+      if (mounted) {
+        nav.pushReplacementNamed('/course', arguments: cid);
+      }
     } catch (e) {
-      sm.showSnackBar(SnackBar(content: Text(e.toString()), backgroundColor: Colors.red));
+      final errorMsg = e.toString().contains('already subscribed') || e.toString().contains('مشترك') 
+          ? 'You are already enrolled in this course!' 
+          : e.toString();
+      sm.showSnackBar(SnackBar(content: Text(errorMsg), backgroundColor: e.toString().contains('already subscribed') || e.toString().contains('مشترك') ? Colors.orange : Colors.red));
+      
+      if (e.toString().contains('already subscribed') || e.toString().contains('مشترك')) {
+         await wp.eagerLoad();
+         if (mounted) {
+            final cid = int.tryParse(widget.course['id']?.toString() ?? '0') ?? 0;
+            nav.pushReplacementNamed('/course', arguments: cid);
+         }
+      }
     } finally {
       if (mounted) setState(() => _isProcessing = false);
     }
@@ -116,6 +145,16 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
     final lang = Provider.of<LanguageProvider>(context);
     final primaryColor = Theme.of(context).primaryColor;
     final onSurface = Theme.of(context).colorScheme.onSurface;
+
+    // ROBUST CATEGORY DETECTION (STRING OR OBJECT)
+    dynamic cat = widget.course['category_name'] ?? widget.course['category'] ?? widget.course['subject'] ?? widget.course['cat_name'];
+    String catStr = "";
+    if (cat is Map) {
+      catStr = (cat['name'] ?? cat['title'] ?? "").toString();
+    } else if (cat != null) {
+      catStr = cat.toString();
+      if (int.tryParse(catStr) != null) catStr = ""; // Ignore pure IDs
+    }
 
     return Stack(
       children: [
@@ -149,23 +188,68 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      // PREMIUM COURSE SUMMARY CARD
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                        decoration: BoxDecoration(color: primaryColor.withOpacity(0.1), borderRadius: BorderRadius.circular(100)),
-                        child: Text(
-                          (lang.translate('premium_course') ?? 'Premium Course').toUpperCase(),
-                          style: TextStyle(color: primaryColor, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1.5),
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(24),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).cardColor,
+                          borderRadius: BorderRadius.circular(32),
+                          border: Border.all(color: primaryColor.withOpacity(0.1), width: 1.5),
+                          boxShadow: [
+                            BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 40, offset: const Offset(0, 20)),
+                            BoxShadow(color: primaryColor.withOpacity(0.05), blurRadius: 20, spreadRadius: -5),
+                          ],
                         ),
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        widget.course['title'] ?? '',
-                        style: TextStyle(color: onSurface, fontSize: 28, fontWeight: FontWeight.w900, letterSpacing: -1),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        "${widget.course['total_materials'] ?? 0} ${lang.translate('materials_count')}",
-                        style: TextStyle(color: onSurface.withOpacity(0.4), fontSize: 14, fontWeight: FontWeight.bold),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                if (catStr.isNotEmpty) ...[
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                    decoration: BoxDecoration(color: primaryColor.withOpacity(0.12), borderRadius: BorderRadius.circular(10)),
+                                    child: Text(catStr.toUpperCase(), style: TextStyle(color: primaryColor, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1)),
+                                  ),
+                                  const SizedBox(width: 8),
+                                ],
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                  decoration: BoxDecoration(color: onSurface.withOpacity(0.05), borderRadius: BorderRadius.circular(10)),
+                                  child: Text((lang.translate('premium_course') ?? 'Premium Course').toUpperCase(), style: TextStyle(color: onSurface.withOpacity(0.5), fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1)),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 16),
+                            Text(
+                              widget.course['title'] ?? '',
+                              style: TextStyle(color: onSurface, fontSize: 24, fontWeight: FontWeight.w900, letterSpacing: -0.5, height: 1.2),
+                            ),
+                            const SizedBox(height: 16),
+                            const Divider(height: 1, color: Colors.black12),
+                            const SizedBox(height: 16),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(lang.translate('course_price') ?? 'COURSE PRICE', style: TextStyle(color: onSurface.withOpacity(0.4), fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1)),
+                                    Text("${widget.course['price'] ?? '0.00'} ${lang.translate('currency_le') ?? 'LE'}", style: TextStyle(color: primaryColor, fontSize: 20, fontWeight: FontWeight.w900)),
+                                  ],
+                                ),
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.end,
+                                  children: [
+                                    Text(lang.translate('materials_count') ?? 'MODULES', style: TextStyle(color: onSurface.withOpacity(0.4), fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1)),
+                                    Text("${widget.course['total_materials'] ?? 0}", style: TextStyle(color: onSurface, fontSize: 20, fontWeight: FontWeight.w900)),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
                       ),
                       const SizedBox(height: 32),
                       
@@ -192,6 +276,29 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
                               const Icon(Icons.wallet_rounded),
                               const SizedBox(width: 12),
                               Text(lang.translate('redeem_wallet') ?? 'Subscribe using Wallet', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900)),
+                            ],
+                          ),
+                        ),
+                      ),
+
+                      const SizedBox(height: 24),
+                      InkWell(
+                        onTap: () => _showCodeDialog(context, isVoucher: false),
+                        borderRadius: BorderRadius.circular(20),
+                        child: Container(
+                          padding: const EdgeInsets.all(20),
+                          width: double.infinity,
+                          decoration: BoxDecoration(
+                            color: onSurface.withOpacity(0.04),
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(color: onSurface.withOpacity(0.05)),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.confirmation_num_rounded, color: primaryColor),
+                              const SizedBox(width: 12),
+                              Text(lang.translate('apply_coupon') ?? 'Coupon Code', style: TextStyle(color: onSurface, fontSize: 16, fontWeight: FontWeight.w900)),
                             ],
                           ),
                         ),

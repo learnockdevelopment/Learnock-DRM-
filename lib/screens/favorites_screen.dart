@@ -5,6 +5,7 @@ import 'package:learnock_drm/providers/language_provider.dart';
 import 'dart:convert';
 import 'dart:io' as io;
 import 'package:learnock_drm/widgets/premium_loader.dart';
+import 'package:flutter_widget_from_html_core/flutter_widget_from_html_core.dart';
 
 class FavoritesScreen extends StatefulWidget {
   const FavoritesScreen({super.key});
@@ -332,9 +333,9 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
                   ],
                   Text(course['title'] ?? '', style: TextStyle(color: onSurface, fontSize: 16, fontWeight: FontWeight.w900, letterSpacing: -0.2)),
                   const SizedBox(height: 8),
-                  Text(
+                  HtmlWidget(
                     course['description'] ?? '', 
-                    style: TextStyle(color: onSurface.withOpacity(0.6), fontSize: 13, height: 1.5, fontWeight: FontWeight.bold)
+                    textStyle: TextStyle(color: onSurface.withOpacity(0.6), fontSize: 13, height: 1.5, fontWeight: FontWeight.bold),
                   ), // NO TRUNCATION
                   const SizedBox(height: 20),
                   Row(

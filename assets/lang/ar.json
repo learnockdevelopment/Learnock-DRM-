@@ -1,6 +1,7 @@
 {
   "welcome_back": "أهلاً بك، 👋",
   "welcome_to": "أهلاً بك في",
+  "welcome_personalized": "مرحباً بك يا {} في {}",
   "welcome_student": "أهلاً بك",
   "student_Learnock": "طالب Learnock",
   "academy": "أكاديمية",
@@ -96,6 +97,9 @@
   "wallet_secure": "بوابة المحفظة الآمنة: جميع المعاملات مشفرة وتتم مباشرة وبشكل حصري من خلال إدارة الأكاديمية الرسمية.",
   "academy_wallet": "محفظة الأكاديمية",
   "premium_course": "دورة دراسية مميزة",
+  "course_price": "سعر الدورة",
+  "apply_coupon": "تفعيل كوبون",
+  "add_voucher": "شحن كود",
   "success": "تم بنجاح!",
   "operation_success": "تمت العملية بنجاح.",
   "operation_failure": "حدث خطأ ما. يرجى المحاولة مرة أخرى.",

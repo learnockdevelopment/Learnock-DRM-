@@ -5,7 +5,6 @@ import 'package:google_fonts/google_fonts.dart' as modern_fonts;
 import 'package:learnock_drm/providers/workspace_provider.dart';
 import 'package:learnock_drm/providers/language_provider.dart';
 import 'package:learnock_drm/providers/theme_provider.dart';
-import 'package:flutter_bunny_video_player/flutter_bunny_video_player.dart';
 import 'package:chewie/chewie.dart';
 import 'package:video_player/video_player.dart';
 import 'package:flutter_pdfview/flutter_pdfview.dart';
@@ -34,8 +33,6 @@ class _MaterialViewerScreenState extends State<MaterialViewerScreen> {
   String? _localPdfPath;
   VideoPlayerController? _videoPlayerController;
   ChewieController? _chewieController;
-  String? _bunnyVideoId;
-  String? _bunnyLibraryId;
   bool _isLandscapeMode = false;
   bool _showNextHint = false;
   int _remainingSeconds = 0;
@@ -58,10 +55,20 @@ class _MaterialViewerScreenState extends State<MaterialViewerScreen> {
   }
 
   void _videoListener() {
-    if (_videoPlayerController == null || !_videoPlayerController!.value.isInitialized) return;
+    if (_videoPlayerController == null) return;
+    final value = _videoPlayerController!.value;
+    if (!value.isInitialized) return;
     
-    final duration = _videoPlayerController!.value.duration;
-    final position = _videoPlayerController!.value.position;
+    final duration = value.duration;
+    final position = value.position;
+    
+    // AUTO-PLAY NEXT ON COMPLETION
+    if (position >= duration && duration > Duration.zero && widget.nextMaterial != null) {
+      _videoPlayerController!.removeListener(_videoListener);
+      _playNext();
+      return;
+    }
+
     final remaining = duration - position;
     
     if (widget.nextMaterial != null && remaining.inSeconds <= 60 && remaining.inSeconds > 0) {
@@ -70,10 +77,13 @@ class _MaterialViewerScreenState extends State<MaterialViewerScreen> {
           _showNextHint = true;
         });
       }
-      setState(() {
-        _remainingSeconds = remaining.inSeconds;
-      });
-    } else if (_showNextHint && remaining.inSeconds > 60) {
+      // ONLY UPDATE IF SECONDS CHANGED TO SAVE REBUILDS
+      if (_remainingSeconds != remaining.inSeconds) {
+        setState(() {
+          _remainingSeconds = remaining.inSeconds;
+        });
+      }
+    } else if (_showNextHint) {
       setState(() {
         _showNextHint = false;
       });
@@ -83,25 +93,52 @@ class _MaterialViewerScreenState extends State<MaterialViewerScreen> {
   Future<void> _fetch() async {
     try {
       final wp = Provider.of<WorkspaceProvider>(context, listen: false);
-      final material = widget.material;
+      Map<String, dynamic> material = widget.material;
       final type = material['type']?.toString().toLowerCase();
       
-      // PURE DIRECT URL EXTRACTION
-      final String directUrl = material['link_url']?.toString() ?? 
-                               material['content_url']?.toString() ?? 
-                               material['file_path']?.toString() ?? 
-                               material['url']?.toString() ?? '';
+      // OPTIONAL: RE-FETCH FROM /LEARN IF URL IS EMPTY (REVISED FLOW)
+      final mid = int.tryParse(material['id']?.toString() ?? '0') ?? 0;
+      if (widget.courseId != null && mid != 0) {
+         try {
+           final learnData = await wp.getCourseLearn(widget.courseId!);
+           final List learnMaterials = (learnData['materials'] ?? []);
+           final enriched = learnMaterials.firstWhere((m) => int.tryParse(m['id']?.toString() ?? '0') == mid, orElse: () => null);
+           if (enriched != null) {
+              material = Map<String, dynamic>.from(enriched);
+              debugPrint('✅ Enriched Material from /learn endpoint');
+           }
+         } catch (e) {
+           debugPrint('ℹ️ /learn fetch failed (using original metadata): $e');
+         }
+      }
+
+      // COMPREHENSIVE URL EXTRACTION
+      String directUrl = material['link_url']?.toString() ?? 
+                         material['content_url']?.toString() ?? 
+                         material['file_path']?.toString() ?? 
+                         material['url']?.toString() ?? 
+                         material['video_url']?.toString() ?? 
+                         material['stream_url']?.toString() ?? '';
       
+      // BUNNY FALLBACK (IF SDK IS REMOVED BUT VIDEOS REMAIN)
+      if (directUrl.isEmpty && (material['bunny_video_id'] != null || material['bunny_id'] != null)) {
+         final vid = material['bunny_video_id'] ?? material['bunny_id'];
+         // Construct standard Bunny HLS endpoint
+         directUrl = "https://iframe.mediadelivery.net/hls/$vid/playlist.m3u8";
+         debugPrint('🎬 Bunny Fallback URL: $directUrl');
+      }
+
       if (type == 'pdf' || type == 'document' || type == 'pdf_file') {
          if (directUrl.isNotEmpty && !directUrl.contains('<iframe')) {
            await _downloadPdf(directUrl);
          }
+         if (mounted) setState(() => _isLoading = false);
       } else {
-         _initVideo(directUrl);
+         debugPrint('🚀 Initializing Video: $directUrl');
+         _initVideo(directUrl, wp.activeWorkspace?.host);
+         // _isLoading will be set to false inside _initVideo once initialized
       }
       
-      if (mounted) setState(() => _isLoading = false);
-
       // MARK PROGRESS
       final courseIdVal = widget.courseId ?? int.tryParse(material['course_id']?.toString() ?? '0') ?? 0;
       if (courseIdVal != 0) await wp.markProgress(courseIdVal, material);
@@ -116,47 +153,136 @@ class _MaterialViewerScreenState extends State<MaterialViewerScreen> {
   }
 
   Future<void> _downloadPdf(String url) async {
-    try {
-      final response = await http.get(Uri.parse(url));
-      final dir = await getApplicationDocumentsDirectory();
-      _localPdfPath = '${dir.path}/temp_${DateTime.now().millisecondsSinceEpoch}.pdf';
-      final file = File(_localPdfPath!);
-      await file.writeAsBytes(response.bodyBytes);
-      if (mounted) setState(() {});
-    } catch (e) {
-      debugPrint('PDF Download Error: $e');
+    int retryCount = 0;
+    while (retryCount < 3) {
+      try {
+        final client = http.Client();
+        final response = await client.get(Uri.parse(url)).timeout(const Duration(seconds: 15));
+        if (response.statusCode == 200) {
+          final dir = await getApplicationDocumentsDirectory();
+          _localPdfPath = '${dir.path}/temp_${DateTime.now().millisecondsSinceEpoch}.pdf';
+          final file = File(_localPdfPath!);
+          await file.writeAsBytes(response.bodyBytes);
+          if (mounted) setState(() {});
+          client.close();
+          break;
+        } else {
+          throw Exception('HTTP ${response.statusCode}');
+        }
+      } catch (e) {
+        retryCount++;
+        debugPrint('PDF Download Retry $retryCount: $e');
+        if (retryCount >= 3) {
+          if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("PDF Download Failed: Connection issue. Check your internet.")));
+        }
+        await Future.delayed(Duration(seconds: retryCount));
+      }
     }
   }
 
-  void _initVideo(String url) {
-    final material = widget.material;
-    
-    // BUNNY SDK BRIDGE (PREMIUM PLAYBACK)
-    if (material['bunny_video_id'] != null || material['bunny_id'] != null) {
-       setState(() {
-         _bunnyVideoId = (material['bunny_video_id'] ?? material['bunny_id']).toString();
-         _bunnyLibraryId = (material['bunny_library_id'] ?? material['library_id'] ?? '519048').toString();
-       });
-       return;
+  void _initVideo(String url, String? host) {
+    if (url.isEmpty) {
+      if (mounted) setState(() => _isLoading = false);
+      return;
     }
 
-    if (url.isNotEmpty) {
-      String streamUrl = url;
-      if (url.contains('<iframe')) {
-        streamUrl = RegExp(r'src="([^"]+)"').firstMatch(url)?.group(1) ?? url;
-      }
-      
-       _videoPlayerController = VideoPlayerController.networkUrl(Uri.parse(streamUrl));
-       _videoPlayerController!.addListener(_videoListener);
-       _chewieController = ChewieController(
-         videoPlayerController: _videoPlayerController!,
-         autoPlay: true,
-         looping: false,
-         aspectRatio: 16 / 9,
-         cupertinoProgressColors: ChewieProgressColors(playedColor: Theme.of(context).primaryColor, bufferedColor: Colors.white24, handleColor: Theme.of(context).primaryColor),
-         materialProgressColors: ChewieProgressColors(playedColor: Theme.of(context).primaryColor, bufferedColor: Colors.white24, handleColor: Theme.of(context).primaryColor),
-       );
+    String streamUrl = url;
+    if (url.contains('<iframe')) {
+      streamUrl = RegExp(r'src="([^"]+)"').firstMatch(url)?.group(1) ?? url;
     }
+    
+    // AUTO-CONVERT BUNNY PLAYER URLS TO HLS STREAMS
+    if (streamUrl.contains('iframe.mediadelivery.net') && !streamUrl.contains('.m3u8')) {
+      try {
+        final uri = Uri.parse(streamUrl);
+        final segments = uri.pathSegments;
+        if (segments.length >= 2) {
+          final videoId = segments.last;
+          streamUrl = "https://iframe.mediadelivery.net/hls/$videoId/playlist.m3u8";
+          debugPrint('✅ Transformed Bunny Player URL to HLS: $streamUrl');
+        }
+      } catch (e) {
+        debugPrint('⚠️ Bunny URL Transformation Error: $e');
+      }
+    }
+
+    // Add Referer for security/403 bypass
+    final Map<String, String> httpHeaders = {
+      'Referer': host != null ? 'https://$host/' : 'https://iframe.mediadelivery.net/',
+      'User-Agent': 'DerasyPlayer/1.0',
+      'Origin': host != null ? 'https://$host' : 'https://iframe.mediadelivery.net',
+    };
+
+    debugPrint('🎬 Initializing Source: $streamUrl');
+
+    try {
+      _videoPlayerController = VideoPlayerController.networkUrl(
+        Uri.parse(streamUrl),
+        httpHeaders: httpHeaders,
+        videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true),
+      );
+    } catch (e) {
+      debugPrint('❌ Video Controller creation failed: $e');
+      if (mounted) setState(() => _isLoading = false);
+      return;
+    }
+    
+    _videoPlayerController!.addListener(_videoListener);
+    
+    _chewieController = ChewieController(
+      videoPlayerController: _videoPlayerController!,
+      autoPlay: true,
+      looping: false,
+      showControls: true,
+      allowFullScreen: true,
+      allowPlaybackSpeedChanging: true,
+      playbackSpeeds: [0.5, 1.0, 1.5, 2.0],
+      aspectRatio: 16 / 9,
+      autoInitialize: true, // Let Chewie handle core init
+      // PERFORMANCE TWEAKS
+      allowedScreenSleep: false,
+      isLive: false,
+      errorBuilder: (context, errorMessage) {
+        return Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.error_outline_rounded, color: Colors.redAccent, size: 42),
+              const SizedBox(height: 16),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 40.0),
+                child: Text(
+                  "Playback Error: $errorMessage\nEnsure you have an active internet connection.",
+                  style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+              const SizedBox(height: 16),
+              TextButton.icon(
+                onPressed: () {
+                  setState(() {
+                    _isLoading = true;
+                    _initVideo(url, host);
+                  });
+                },
+                icon: const Icon(Icons.refresh_rounded, size: 14),
+                label: const Text("RETRY PLAYBACK", style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900)),
+              )
+            ],
+          ),
+        );
+      },
+      cupertinoProgressColors: ChewieProgressColors(playedColor: Theme.of(context).primaryColor, bufferedColor: Colors.white24, handleColor: Theme.of(context).primaryColor),
+      materialProgressColors: ChewieProgressColors(playedColor: Theme.of(context).primaryColor, bufferedColor: Colors.white24, handleColor: Theme.of(context).primaryColor),
+    );
+
+    // Initial load tracking
+    _videoPlayerController!.initialize().then((_) {
+       if (mounted) setState(() => _isLoading = false);
+    }).catchError((e) {
+       debugPrint('❌ Video Init Error: $e');
+       if (mounted) setState(() => _isLoading = false);
+    });
   }
 
   void _playNext() {
@@ -243,17 +369,9 @@ class _MaterialViewerScreenState extends State<MaterialViewerScreen> {
                         child: Stack(
                           children: [
                             Positioned.fill(
-                              child: (_bunnyVideoId != null)
-                                ? BunnyPlayerView(
-                                    videoId: _bunnyVideoId!, 
-                                    libraryId: int.tryParse(_bunnyLibraryId ?? '0') ?? 0, 
-                                    accessKey: material['video_access_key'] ?? material['access_key'] ?? "", 
-                                    isPortrait: !_isLandscapeMode, 
-                                    isScreenShotProtectEnable: true
-                                  )
-                                : (_chewieController != null) 
-                                  ? Chewie(controller: _chewieController!) 
-                                  : const PremiumLoader(),
+                              child: (_chewieController != null) 
+                                ? Chewie(controller: _chewieController!) 
+                                : const PremiumLoader(),
                             ),
                             
                             // NEXT VIDEO OVERLAY (BINGE MODE)

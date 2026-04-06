@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:learnock_drm/providers/workspace_provider.dart';
 import 'package:learnock_drm/providers/language_provider.dart';
 import 'dart:convert';
+import 'package:flutter_widget_from_html_core/flutter_widget_from_html_core.dart';
 
 class HighlightsScreen extends StatelessWidget {
   const HighlightsScreen({super.key});
@@ -93,7 +94,10 @@ class HighlightsScreen extends StatelessWidget {
         children: [
           Text((title.isNotEmpty ? title : 'Academy Vision').toUpperCase(), style: TextStyle(color: primary, fontSize: 11, fontWeight: FontWeight.w900, letterSpacing: 1.5)),
           const SizedBox(height: 16),
-          Text(desc, style: TextStyle(color: onSurface, fontSize: 15, fontWeight: FontWeight.bold, height: 1.6)),
+          HtmlWidget(
+            desc, 
+            textStyle: TextStyle(color: onSurface, fontSize: 15, fontWeight: FontWeight.bold, height: 1.6),
+          ),
         ],
       ),
     );
@@ -169,9 +173,9 @@ class HighlightsScreen extends StatelessWidget {
                       borderRadius: BorderRadius.circular(20),
                       border: Border.all(color: primary.withOpacity(0.05), width: 1),
                     ),
-                    child: Text(
+                    child: HtmlWidget(
                       feat['description'] ?? '',
-                      style: TextStyle(
+                      textStyle: TextStyle(
                         color: onSurface.withOpacity(0.7),
                         fontSize: 14,
                         fontWeight: FontWeight.bold,
