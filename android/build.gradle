@@ -22,7 +22,26 @@ subprojects {
                 }
                 defaultConfig {
                     targetSdkVersion 36
+                    externalNativeBuild {
+                        cmake {
+                            arguments "-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON"
+                        }
+                        ndkBuild {
+                            arguments "APP_SUPPORT_FLEXIBLE_PAGE_SIZES:=true"
+                        }
+                    }
                 }
+                packaging {
+                    jniLibs {
+                        useLegacyPackaging = false
+                    }
+                }
+                packagingOptions {
+                    jniLibs {
+                        useLegacyPackaging = false
+                    }
+                }
+
                 if (project.plugins.hasPlugin('kotlin-android')) {
                     kotlinOptions {
                         jvmTarget = '17'

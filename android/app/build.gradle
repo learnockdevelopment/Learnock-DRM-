@@ -15,12 +15,12 @@ if (localPropertiesFile.exists()) {
 
 def flutterVersionCode = localProperties.getProperty("flutter.versionCode")
 if (flutterVersionCode == null) {
-    flutterVersionCode = "8"
+    flutterVersionCode = "11"
 }
 
 def flutterVersionName = localProperties.getProperty("flutter.versionName")
 if (flutterVersionName == null) {
-    flutterVersionName = "8"
+    flutterVersionName = "11"
 }
 
 def keystoreProperties = new Properties()
@@ -40,6 +40,8 @@ android {
             keyPassword = keystoreProperties['keyPassword']
             storeFile = keystoreProperties['storeFile'] ? file(keystoreProperties['storeFile']) : null
             storePassword = keystoreProperties['storePassword']
+            v1SigningEnabled false
+            v2SigningEnabled true
         }
     }
 
@@ -56,8 +58,17 @@ android {
         applicationId = "com.omran_college.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = flutterVersionCode.toInteger()
-        versionName = flutterVersionName
+        versionCode = 11
+        versionName = "1.0.11"
+
+        externalNativeBuild {
+            cmake {
+                arguments "-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON"
+            }
+            ndkBuild {
+                arguments "APP_SUPPORT_FLEXIBLE_PAGE_SIZES:=true"
+            }
+        }
     }
 
     buildTypes {
@@ -70,7 +81,18 @@ android {
         jniLibs {
             useLegacyPackaging = false
         }
+        resources {
+            excludes += '/META-INF/{AL2.0,LGPL2.1}'
+        }
     }
+
+    packagingOptions {
+        jniLibs {
+            useLegacyPackaging = false
+        }
+    }
+
+
 }
 
 flutter {
