@@ -10,7 +10,8 @@
         android:label="Learnock Drm"
         android:name="${applicationName}"
         android:icon="@mipmap/launcher_icon"
-        android:extractNativeLibs="false">
+        android:extractNativeLibs="false"
+        tools:replace="android:extractNativeLibs">
         <activity
             android:name=".MainActivity"
             android:exported="true"

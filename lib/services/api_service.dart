@@ -93,7 +93,7 @@ class ApiService {
     await _saveState();
   }
 
-  Future<dynamic> _request(
+  Future<dynamic> request(
     String method,
     String path, {
     Map<String, dynamic>? body,
@@ -169,19 +169,19 @@ class ApiService {
   }
 
   Future<Map<String, dynamic>> getPlayback(String code) async {
-    return await _request('GET', '/courses/playback/$code');
+    return await request('GET', '/courses/playback/$code');
   }
 
   // REVISED FLOW: /api/courses/[id]/learn
   Future<Map<String, dynamic>> getCourseLearn(int id) async {
-    return await _request('GET', '/courses/$id/learn');
+    return await request('GET', '/courses/$id/learn');
   }
 
   Future<Map<String, dynamic>> getDashboard() async {
     final futures = [
-      _request('GET', '/dashboard/stats'),
-      _request('GET', '/dashboard/courses').catchError((_) => {'courses': []}),
-      _request('GET', '/courses').catchError((_) => {'courses': [], 'categories': []}),
+      request('GET', '/dashboard/stats'),
+      request('GET', '/dashboard/courses').catchError((_) => {'courses': []}),
+      request('GET', '/courses').catchError((_) => {'courses': [], 'categories': []}),
     ];
 
     final results = await Future.wait(futures);
@@ -198,73 +198,73 @@ class ApiService {
   }
 
   Future<Map<String, dynamic>> getAllCourses() async {
-    return await _request('GET', '/courses');
+    return await request('GET', '/courses');
   }
 
   Future<Map<String, dynamic>> getCourse(int id) async {
-    return await _request('GET', '/courses/$id');
+    return await request('GET', '/courses/$id');
   }
 
   Future<void> markProgress(int courseId, int materialId) async {
-    await _request('POST', '/courses/$courseId/progress', body: {
+    await request('POST', '/courses/$courseId/progress', body: {
       'materialId': materialId,
     });
   }
 
   Future<Map<String, dynamic>> toggleFavorite(int courseId) async {
-    return await _request('POST', '/courses/favorite', body: {'courseId': courseId});
+    return await request('POST', '/courses/favorite', body: {'courseId': courseId});
   }
 
   Future<Map<String, dynamic>> getFavorites() async {
-    return await _request('GET', '/courses/favorite');
+    return await request('GET', '/courses/favorite');
   }
 
   Future<Map<String, dynamic>> getSiteSettings() async {
-    return await _request('GET', '/site-settings');
+    return await request('GET', '/site-settings');
   }
 
   Future<Map<String, dynamic>> redeemCoupon(String code) async {
-    return await _request('POST', '/coupons/redeem', body: {'code': code});
+    return await request('POST', '/coupons/redeem', body: {'code': code});
   }
 
   Future<Map<String, dynamic>> redeemVoucher(String code) async {
-    return await _request('POST', '/vouchers/redeem', body: {'code': code});
+    return await request('POST', '/vouchers/redeem', body: {'code': code});
   }
 
   Future<Map<String, dynamic>> checkoutWallet(int courseId) async {
-    return await _request('POST', '/checkout/wallet', body: {'courseId': courseId});
+    return await request('POST', '/checkout/wallet', body: {'courseId': courseId});
   }
 
   // REVISED FLOW: /api/courses/unenroll
   Future<Map<String, dynamic>> unenroll(int courseId) async {
-    return await _request('POST', '/courses/unenroll', body: {'courseId': courseId});
+    return await request('POST', '/courses/unenroll', body: {'courseId': courseId});
   }
 
   Future<Map<String, dynamic>> getWalletTransactions() async {
-    return await _request('GET', '/wallet/transactions');
+    return await request('GET', '/wallet/transactions');
   }
 
   Future<Map<String, dynamic>> getWalletBalance() async {
-    return await _request('GET', '/wallet/status');
+    return await request('GET', '/wallet/status');
   }
 
   // REVISED FLOW: /api/categories
   Future<Map<String, dynamic>> getCategories() async {
-    return await _request('GET', '/categories');
+    return await request('GET', '/categories');
   }
 
   // REVISED FLOW: /api/quizzes/[id]/submit
   Future<Map<String, dynamic>> submitQuiz(int quizId, dynamic results) async {
-    return await _request('POST', '/quizzes/$quizId/submit', body: {'results': results});
+    return await request('POST', '/quizzes/$quizId/submit', body: {'results': results});
   }
 
   // REVISED FLOW: /api/courses/[id]/reviews
   Future<Map<String, dynamic>> getReviews(int courseId) async {
-    return await _request('GET', '/courses/$courseId/reviews');
+    return await request('GET', '/courses/$courseId/reviews');
   }
 
   Future<Map<String, dynamic>> submitReview(int courseId, int rating, String comment) async {
-    return await _request('POST', '/courses/$courseId/reviews', body: {
+    return await request('POST', '/courses/$courseId/reviews', body: {
       'rating': rating,
       'comment': comment,
     });
@@ -272,11 +272,25 @@ class ApiService {
 
   // REVISED FLOW: /api/imagekit/auth
   Future<Map<String, dynamic>> getImageKitAuth() async {
-    return await _request('GET', '/imagekit/auth');
+    return await request('GET', '/imagekit/auth');
+  }
+
+  // REVISED FLOW: /api/auth/me
+  Future<Map<String, dynamic>> getMe() async {
+    return await request('GET', '/auth/me');
+  }
+
+  // REVISED FLOW: /api/auth/batches
+  Future<Map<String, dynamic>> getGroups() async {
+    return await request('GET', '/auth/batches');
+  }
+
+  Future<Map<String, dynamic>> joinGroup(int groupId) async {
+    return await request('POST', '/auth/batches', body: {'groupId': groupId});
   }
 
   // REVISED FLOW: /api/schedule
   Future<Map<String, dynamic>> getSchedule() async {
-    return await _request('GET', '/schedule');
+    return await request('GET', '/schedule');
   }
 }

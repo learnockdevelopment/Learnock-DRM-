@@ -119,5 +119,17 @@
   "verifying_system": "جاري فحص سلامة النظام...",
   "system_safe": "النظام آمن",
   "close_app": "إغلاق التطبيق",
-  "initializing_security": "جاري التحقق من الأمان..."
+  "initializing_security": "جاري التحقق من الأمان...",
+  "educational_groups": "المجموعات التعليمية",
+  "select_batch": "اختر مجموعتك الدراسية",
+  "must_join_group": "يجب أن تكون منضماً إلى مجموعة قبل البدء بمتابعة المنهج الدراسي.",
+  "confirm_selection": "تأكيد الاختيار",
+  "join_group_confirm": "هل تود الانضمام إلى مجموعة",
+  "yes_join": "نعم، انضم الآن",
+  "my_current_groups": "مجموعاتي الدراسية",
+  "available_groups": "المجموعات المتاحة",
+  "no_groups": "لا توجد مجموعات متاحة",
+  "all_joined": "لقد انضممت إلى جميع المجموعات المتاحة",
+  "joined": "تم الانضمام",
+  "select_action": "اختيار"
 }

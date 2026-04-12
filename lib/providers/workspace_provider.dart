@@ -11,6 +11,7 @@ class WorkspaceProvider with ChangeNotifier {
   Map<String, dynamic>? _cachedDashboard;
   Map<String, dynamic>? _cachedFavorites;
   Map<String, dynamic>? _cachedWallet;
+  Map<String, dynamic>? _cachedME;
   bool _isInitialized = false;
   bool _isEagerLoaded = false;
   final Map<int, Map<String, dynamic>> _lastAccessedMaterials = {};
@@ -21,6 +22,7 @@ class WorkspaceProvider with ChangeNotifier {
   Map<String, dynamic>? get cachedDashboard => _cachedDashboard;
   Map<String, dynamic>? get cachedFavorites => _cachedFavorites;
   Map<String, dynamic>? get cachedWallet => _cachedWallet;
+  Map<String, dynamic>? get cachedME => _cachedME;
   Map<int, Map<String, dynamic>> get lastAccessedMaterials => _lastAccessedMaterials;
 
 
@@ -47,6 +49,7 @@ class WorkspaceProvider with ChangeNotifier {
       getDashboard(),
       getFavorites(),
       getWalletBalance(),
+      getMe(),
     ];
 
     try {
@@ -54,6 +57,7 @@ class WorkspaceProvider with ChangeNotifier {
       _cachedDashboard = results[1] as Map<String, dynamic>;
       _cachedFavorites = results[2] as Map<String, dynamic>;
       _cachedWallet = results[3] as Map<String, dynamic>;
+      _cachedME = results[4] as Map<String, dynamic>;
       _isEagerLoaded = true;
       debugPrint('🚀 EAGER LOAD COMPLETE: All data cached.');
     } catch (e) {
@@ -106,6 +110,15 @@ class WorkspaceProvider with ChangeNotifier {
       }
     } catch (e) {
       debugPrint('Branding Enrich Error: $e');
+      if (e.toString().contains('Tenant not registered')) {
+        debugPrint('⚠️ CRITICAL: Tenant revoked or not found. Purging workspace ID: $id');
+        await removeWorkspace(id);
+        
+        // If we have a context, force a reset to the root to show onboarding/selection
+        if (context != null && context.mounted) {
+          Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
+        }
+      }
     }
   }
 
@@ -198,7 +211,18 @@ class WorkspaceProvider with ChangeNotifier {
   Future<Map<String, dynamic>> getWalletTransactions() => _apiService.getWalletTransactions();
   Future<Map<String, dynamic>> getWalletBalance() => _apiService.getWalletBalance();
   
+  Future<Map<String, dynamic>> getCourses({int? categoryId}) async {
+     final path = categoryId != null ? '/courses?categoryId=$categoryId' : '/courses';
+     final res = await _apiService.request('GET', path);
+     return Map<String, dynamic>.from(res);
+  }
+
   Future<Map<String, dynamic>> getCategories() => _apiService.getCategories();
+  
+  Future<Map<String, dynamic>> getMe() => _apiService.getMe();
+  Future<Map<String, dynamic>> getGroups() => _apiService.getGroups();
+  Future<Map<String, dynamic>> joinGroup(int groupId) => _apiService.joinGroup(groupId);
+  
   Future<Map<String, dynamic>> submitQuiz(int quizId, dynamic results) => _apiService.submitQuiz(quizId, results);
   Future<Map<String, dynamic>> getReviews(int courseId) => _apiService.getReviews(courseId);
   Future<Map<String, dynamic>> submitReview(int courseId, int rating, String comment) => _apiService.submitReview(courseId, rating, comment);

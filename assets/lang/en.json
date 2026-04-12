@@ -119,5 +119,17 @@
   "verifying_system": "Verifying system integrity...",
   "system_safe": "System is safe",
   "close_app": "Close Application",
-  "initializing_security": "INITIALIZING SECURITY..."
+  "initializing_security": "INITIALIZING SECURITY...",
+  "educational_groups": "Educational Groups",
+  "select_batch": "Select Your Batch",
+  "must_join_group": "You must be added to a group before you can continue.",
+  "confirm_selection": "Confirm Selection",
+  "join_group_confirm": "Join group",
+  "yes_join": "Yes, Join",
+  "my_current_groups": "My Current Groups",
+  "available_groups": "Available Batches",
+  "no_groups": "No groups available",
+  "all_joined": "You have joined all available groups",
+  "joined": "JOINED",
+  "select_action": "SELECT"
 }

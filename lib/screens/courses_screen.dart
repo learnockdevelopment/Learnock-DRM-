@@ -18,6 +18,8 @@ class _CoursesScreenState extends State<CoursesScreen> {
   bool _isLoading = false;
   bool _isInit = true;
   List<dynamic> _availableCourses = [];
+  List<dynamic> _categories = [];
+  int? _selectedCategoryId;
 
   @override
   void initState() {
@@ -39,7 +41,7 @@ class _CoursesScreenState extends State<CoursesScreen> {
     setState(() => _isLoading = true);
     try {
       final results = await Future.wait([
-        wp.getDashboard(),
+        wp.getCourses(categoryId: _selectedCategoryId),
         wp.getFavorites(),
       ]);
       _applyData(results[0] as Map<String, dynamic>, results[1] as Map<String, dynamic>);
@@ -50,15 +52,26 @@ class _CoursesScreenState extends State<CoursesScreen> {
 
   void _applyData(Map<String, dynamic> dashRes, Map<String, dynamic> favRes) {
     final wp = Provider.of<WorkspaceProvider>(context, listen: false);
-    final List apiCourses = (dashRes['courses'] as List?) ?? [];
-    final List allCoursesRaw = (dashRes['all_courses'] as List?) ?? json.decode(wp.activeWorkspace?.latestCoursesJson ?? '[]');
     
-    final Set<int> enrolledIds = apiCourses.map((c) => int.tryParse(c['id']?.toString() ?? '0') ?? 0).toSet();
+    // Robustly handle dashboard response even if it's wrapped in {success: true, data: {...}} or {success: true, categories: [...]}
+    final Map<String, dynamic> data = (dashRes['data'] is Map<String, dynamic>) 
+        ? Map<String, dynamic>.from(dashRes['data']) 
+        : dashRes;
+
+    final List coursesFromApi = (data['courses'] as List?) ?? [];
+    final List allCoursesRaw = coursesFromApi.isNotEmpty ? coursesFromApi : (data['all_courses'] as List?) ?? json.decode(wp.activeWorkspace?.latestCoursesJson ?? '[]');
+    final List categoriesRaw = (data['categories'] as List?) ?? (dashRes['categories'] as List?) ?? [];
+    
+    // In this screen, apiCourses (enrolled) should ideally come from dashboard, 
+    // but here we are fetching available courses.
+    final List enrolledCourses = (dashRes['courses'] as List?) ?? [];
+    final Set<int> enrolledIds = enrolledCourses.map((c) => int.tryParse(c['id']?.toString() ?? '0') ?? 0).toSet();
     final List favoritesList = (favRes['favorites'] as List?) ?? [];
     final Set<int> favoriteIds = favoritesList.map((f) => int.tryParse(f['id']?.toString() ?? '0') ?? 0).toSet();
     
     if (mounted) {
       setState(() {
+        _categories = categoriesRaw;
         _availableCourses = allCoursesRaw.map((c) {
           final map = Map<String, dynamic>.from(c);
           final cid = int.tryParse(map['id']?.toString() ?? '0') ?? 0;
@@ -170,6 +183,14 @@ class _CoursesScreenState extends State<CoursesScreen> {
     }
   }
 
+  String _stripHtml(String? html) {
+    if (html == null) return '';
+    // Unescape common HTML entities
+    String result = html.replaceAll('&lt;', '<').replaceAll('&gt;', '>').replaceAll('&amp;', '&').replaceAll('&quot;', '"').replaceAll('&#39;', "'").replaceAll('&nbsp;', ' ');
+    RegExp exp = RegExp(r"<[^>]*>", multiLine: true, caseSensitive: true);
+    return result.replaceAll(exp, '').trim();
+  }
+
   @override
   Widget build(BuildContext context) {
     final wp = Provider.of<WorkspaceProvider>(context);
@@ -212,16 +233,36 @@ class _CoursesScreenState extends State<CoursesScreen> {
             ),
           ),
           
+          if (_categories.isNotEmpty)
+            SliverToBoxAdapter(
+              child: Container(
+                height: 50,
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: ListView(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  children: [
+                    _buildCategoryChip(null, lang.translate('all') ?? 'All'),
+                    ..._categories.map((cat) => _buildCategoryChip(cat['id'], cat['name'])),
+                  ],
+                ),
+              ),
+            ),
+          
           if (_isLoading && _isInit)
             const SliverFillRemaining(
               child: Center(
                 child: PremiumLoader(),
               ),
             )
-          else if (courses.isEmpty)
-            SliverFillRemaining(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 40),
+          else if (_availableCourses.where((c) {
+            if (_selectedCategoryId == null) return true;
+            final cid = int.tryParse(c['category_id']?.toString() ?? '0') ?? 0;
+            return cid == _selectedCategoryId;
+          }).isEmpty)
+            SliverPadding(
+              padding: const EdgeInsets.symmetric(horizontal: 40),
+              sliver: SliverToBoxAdapter(
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
@@ -238,13 +279,13 @@ class _CoursesScreenState extends State<CoursesScreen> {
                     ),
                     const SizedBox(height: 32),
                     Text(
-                      lang.translate('empty_courses_title') ?? 'Your journey starts here',
+                      lang.translate('empty_courses_title') ?? 'No courses available',
                       style: TextStyle(color: onSurface, fontSize: 20, fontWeight: FontWeight.w900, letterSpacing: -0.5),
                       textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 12),
                     Text(
-                      lang.translate('empty_courses_subtitle') ?? 'Explore our wide range of courses specifically designed for you.',
+                      lang.translate('empty_courses_subtitle') ?? 'There are no courses matching this category yet.',
                       style: TextStyle(color: onSurface.withOpacity(0.5), fontSize: 13, height: 1.5, fontWeight: FontWeight.bold),
                       textAlign: TextAlign.center,
                     ),
@@ -257,12 +298,45 @@ class _CoursesScreenState extends State<CoursesScreen> {
               padding: const EdgeInsets.fromLTRB(20, 12, 20, 100),
               sliver: SliverList(
                 delegate: SliverChildBuilderDelegate(
-                  (context, index) => _buildCourseCard(courses[index], primaryColor, onSurface, context, lang),
-                  childCount: courses.length,
+                  (context, index) {
+                    final filtered = _availableCourses.where((c) {
+                      if (_selectedCategoryId == null) return true;
+                      final cid = int.tryParse(c['category_id']?.toString() ?? '0') ?? 0;
+                      return cid == _selectedCategoryId;
+                    }).toList();
+                    return _buildCourseCard(filtered[index], primaryColor, onSurface, context, lang);
+                  },
+                  childCount: _availableCourses.where((c) {
+                    if (_selectedCategoryId == null) return true;
+                    final cid = int.tryParse(c['category_id']?.toString() ?? '0') ?? 0;
+                    return cid == _selectedCategoryId;
+                  }).length,
                 ),
               ),
             ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildCategoryChip(dynamic id, String name) {
+    final isSelected = _selectedCategoryId == id;
+    final primaryColor = Theme.of(context).primaryColor;
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: ChoiceChip(
+        label: Text(name, style: TextStyle(color: isSelected ? Colors.white : Theme.of(context).colorScheme.onSurface, fontSize: 12, fontWeight: FontWeight.bold)),
+        selected: isSelected,
+        selectedColor: primaryColor,
+        backgroundColor: Theme.of(context).cardColor,
+        onSelected: _isLoading ? null : (selected) {
+          if (selected) {
+            setState(() {
+              _selectedCategoryId = id as int?;
+            });
+            _fetch(); // RE-FETCH FROM SERVER FOR ACCURATE FILTERING
+          }
+        },
       ),
     );
   }
@@ -336,10 +410,11 @@ class _CoursesScreenState extends State<CoursesScreen> {
                   ],
                   Text(course['title'] ?? '', style: TextStyle(color: onSurface, fontSize: 16, fontWeight: FontWeight.w900, letterSpacing: -0.2)),
                   const SizedBox(height: 8),
-                  HtmlWidget(
-                    course['description'] ?? '', 
-                    textStyle: TextStyle(color: onSurface.withOpacity(0.6), fontSize: 13, height: 1.5, fontWeight: FontWeight.bold),
-                  ), // NO TRUNCATION
+                  Text(
+                    _stripHtml(course['description']), 
+                    style: TextStyle(color: onSurface.withOpacity(0.6), fontSize: 13, height: 1.5, fontWeight: FontWeight.bold),
+                    maxLines: 2, overflow: TextOverflow.ellipsis,
+                  ),
                   const SizedBox(height: 20),
                   Row(
                     children: [

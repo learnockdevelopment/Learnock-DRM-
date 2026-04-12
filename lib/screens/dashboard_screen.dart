@@ -8,7 +8,6 @@ import 'package:learnock_drm/widgets/premium_loader.dart';
 import 'package:learnock_drm/models/workspace.dart';
 import 'dart:convert';
 import 'dart:io' as io;
-import 'package:flutter_widget_from_html_core/flutter_widget_from_html_core.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -23,6 +22,7 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
   bool _isLoading = true;
   String? _lastWorkspaceId;
   String _walletBalanceStr = "0.00";
+  bool _isModalShowing = false;
   late AnimationController _waController;
 
   @override
@@ -60,55 +60,6 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
     }
   }
 
-  void _showResultPrompt({required bool success, String? message}) {
-    final lang = Provider.of<LanguageProvider>(context, listen: false);
-    final primaryColor = Theme.of(context).primaryColor;
-    final onSurface = Theme.of(context).colorScheme.onSurface;
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(height: 24),
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(color: (success ? Colors.green : Colors.red).withOpacity(0.1), shape: BoxShape.circle),
-              child: Icon(success ? Icons.check_circle_rounded : Icons.error_rounded, color: success ? Colors.green : Colors.red, size: 48),
-            ),
-            const SizedBox(height: 24),
-            Text(
-              success ? (lang.translate('success') ?? 'Success!') : (lang.translate('failure') ?? 'Error'),
-              style: TextStyle(color: onSurface, fontWeight: FontWeight.w900, fontSize: 18),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              message ?? (success ? lang.translate('operation_success') ?? 'Operation completed.' : lang.translate('operation_failure') ?? 'Please try again.'),
-              style: TextStyle(color: onSurface.withOpacity(0.5), fontSize: 13, height: 1.4),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 24),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: () => Navigator.pop(context),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: primaryColor,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                  elevation: 0,
-                ),
-                child: Text(lang.translate('confirm') ?? 'OK', style: const TextStyle(fontWeight: FontWeight.w900)),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 
   Future<void> _toggleFavorite(Map<String, dynamic> course) async {
     final wp = Provider.of<WorkspaceProvider>(context, listen: false);
@@ -128,7 +79,7 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
       
       await wp.toggleFavorite(cid);
       
-      if (mounted) {
+      if (mounted) { 
         showDialog(
           context: context,
           builder: (context) => AlertDialog(
@@ -143,9 +94,9 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
                   child: const Icon(Icons.check_circle_rounded, color: Colors.green, size: 48),
                 ),
                 const SizedBox(height: 24),
-                Text(lang.translate('success') ?? 'Success!', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18)),
+                Text(lang.translate('success'), style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18)),
                 const SizedBox(height: 8),
-                Text(isFav ? (lang.translate('added_to_favorites') ?? 'Added to favorites successfully.') : (lang.translate('removed_from_favorites') ?? 'Removed from favorites.'), textAlign: TextAlign.center, style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6))),
+                Text(isFav ? (lang.translate('added_to_favorites')) : (lang.translate('removed_from_favorites')), textAlign: TextAlign.center, style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6))),
                 const SizedBox(height: 24),
                 SizedBox(
                   width: double.infinity,
@@ -155,7 +106,7 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
                       Navigator.pop(context);
                       _fetch();
                     },
-                    child: Text(lang.translate('confirm') ?? 'OK', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                    child: Text(lang.translate('confirm'), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                   ),
                 ),
               ],
@@ -209,18 +160,18 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
     // IF WE HAVE CACHED DATA AND IT IS THE SAME WORKSPACE, USE IT IMMEDIATELY
     if (wp.isEagerLoaded && wp.cachedDashboard != null) {
       final cached = wp.cachedDashboard!;
-      final favsRes = wp.cachedFavorites ?? {'favorites': []};
       final balRes = wp.cachedWallet ?? {'balance': '0.00'};
-      
-      final data = Map<String, dynamic>.from(cached);
-      data['favorites_list'] = favsRes['favorites'] ?? [];
+      final meRes = wp.cachedME ?? {'user': {'has_group': true}};
       
       setState(() {
-        _dashboardData = data;
-        _walletBalanceStr = (balRes['balance'] ?? balRes['wallet_balance'] ?? "0").toString();
+        _dashboardData = Map<String, dynamic>.from(cached);
+        _walletBalanceStr = (meRes['user']?['wallet_balance'] ?? balRes['balance'] ?? "0").toString();
         _isLoading = false;
       });
       
+      // CHECK GROUP EVEN IF CACHED
+      _checkGroupMembership(meRes);
+
       // OPTIONAL: RE-FETCH IN BACKGROUND TO KEEP IT FRESH WITHOUT SHOWING LOADER
       _backgroundRefresh();
       return;
@@ -236,30 +187,113 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
         wp.getDashboard(),
         wp.getFavorites(),
         wp.getWalletBalance(),
+        wp.getMe(),
       ];
       
       final results = await Future.wait(futures);
-      final dashboardIdx = active != null ? 1 : 0;
-      final favsIdx = active != null ? 2 : 1;
-      final balIdx = active != null ? 3 : 2;
-
-      final data = Map<String, dynamic>.from(results[dashboardIdx] as Map);
-      final favsRes = results[favsIdx] as Map<String, dynamic>;
-      final balRes = results[balIdx] as Map<String, dynamic>;
-
-      data['favorites_list'] = favsRes['favorites'] ?? [];
+      final offset = active != null ? 1 : 0;
       
+      final data = Map<String, dynamic>.from(results[0 + offset] as Map);
+      final favsRes = results[1 + offset] as Map<String, dynamic>;
+      final balRes = results[2 + offset] as Map<String, dynamic>;
+      final meRes = results[3 + offset] as Map<String, dynamic>;
+
       if (mounted) {
         setState(() { 
           _dashboardData = data; 
-          _walletBalanceStr = (balRes['balance'] ?? balRes['wallet_balance'] ?? "0").toString();
+          _walletBalanceStr = (meRes['user']?['wallet_balance'] ?? balRes['balance'] ?? "0").toString();
           _isLoading = false; 
         });
+
+        _checkGroupMembership(meRes);
       }
     } catch (e) {
       debugPrint('Fetch Error: $e');
+    } finally {
       if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  Future<void> _checkGroupMembership(Map<String, dynamic> meRes) async {
+    if (_isModalShowing) return;
+    final wp = Provider.of<WorkspaceProvider>(context, listen: false);
+    final user = meRes['user'];
+    if (user == null) return;
+
+    final hg = user['has_group'];
+    final bool hasGroup = hg == true || hg == 1 || hg == 'true' || hg == '1';
+    
+    if (!hasGroup) {
+       final groupsRes = await wp.getGroups();
+       final groups = groupsRes['groups'] as List? ?? [];
+       if (groups.isNotEmpty) {
+          setState(() => _isModalShowing = true);
+          await _showMandatoryGroupModal(groups);
+          if (mounted) setState(() => _isModalShowing = false);
+       }
+    }
+  }
+
+  Future<void> _showMandatoryGroupModal(List groups) async {
+     final lang = Provider.of<LanguageProvider>(context, listen: false);
+     await showDialog(
+       context: context,
+       barrierDismissible: false,
+       builder: (context) => WillPopScope(
+         onWillPop: () async => false,
+         child: AlertDialog(
+           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+           title: Text(lang.translate('select_batch') ?? "SELECT YOUR BATCH", style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18)),
+           content: SizedBox(
+             width: double.maxFinite,
+             child: Column(
+               mainAxisSize: MainAxisSize.min,
+               children: [
+                 Text(lang.translate('must_join_group') ?? "You must be added to a group before you can continue.", style: const TextStyle(fontSize: 13, height: 1.4, color: Colors.white60)),
+                 const SizedBox(height: 20),
+                 Flexible(
+                   child: ListView.builder(
+                     shrinkWrap: true,
+                     itemCount: groups.length,
+                     itemBuilder: (c, i) {
+                        final g = groups[i];
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 10),
+                          decoration: BoxDecoration(color: Colors.white.withOpacity(0.05), borderRadius: BorderRadius.circular(15)),
+                          child: ListTile(
+                            title: Text(g['name'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                            subtitle: Text("${g['day_name'] ?? ''} @ ${g['session_time'] ?? ''}", style: const TextStyle(fontSize: 11)),
+                            trailing: const Icon(Icons.add_circle_outline_rounded, color: Colors.white30),
+                            onTap: () async {
+                               final confirm = await showDialog<bool>(
+                                 context: context,
+                                 builder: (c) => AlertDialog(
+                                   title: Text(lang.translate('confirm_selection') ?? "CONFIRM SELECTION", style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w900)),
+                                   content: Text("${lang.translate('join_group_confirm') ?? 'Join group'} ${g['name']}?"),
+                                   actions: [
+                                      TextButton(onPressed: () => Navigator.pop(c, false), child: Text(lang.translate('cancel') ?? "CANCEL")),
+                                      TextButton(onPressed: () => Navigator.pop(c, true), child: Text(lang.translate('yes_join') ?? "YES, JOIN")),
+                                   ],
+                                 ),
+                               );
+                               if (confirm == true) {
+                                  final wp = Provider.of<WorkspaceProvider>(context, listen: false);
+                                  await wp.joinGroup(g['id']);
+                                  if (context.mounted) Navigator.pop(context);
+                                  _fetch(); // Refresh
+                               }
+                            },
+                          ),
+                        );
+                     },
+                   ),
+                 ),
+               ],
+             ),
+           ),
+         ),
+       ),
+     );
   }
 
   Future<void> _backgroundRefresh() async {
@@ -564,6 +598,14 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
     );
   }
 
+  String _stripHtml(String? html) {
+    if (html == null) return '';
+    // Unescape common HTML entities
+    String result = html.replaceAll('&lt;', '<').replaceAll('&gt;', '>').replaceAll('&amp;', '&').replaceAll('&quot;', '"').replaceAll('&#39;', "'").replaceAll('&nbsp;', ' ');
+    RegExp exp = RegExp(r"<[^>]*>", multiLine: true, caseSensitive: true);
+    return result.replaceAll(exp, '').trim();
+  }
+
   Widget _buildWhatsAppPulse(String number, Color primary) {
     return ScaleTransition(
       scale: Tween<double>(begin: 1.0, end: 1.2).animate(CurvedAnimation(parent: _waController, curve: Curves.easeInOut)),
@@ -597,10 +639,11 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
           const SizedBox(height: 16),
           Text(feat['title'] ?? '', style: TextStyle(color: onSurface, fontSize: 14, fontWeight: FontWeight.w900, height: 1.2)), // NO TRUNCATION
           const SizedBox(height: 8),
-          HtmlWidget(
-            feat['description'] ?? '', 
-            textStyle: TextStyle(color: onSurface.withOpacity(0.4), fontSize: 11, fontWeight: FontWeight.bold),
-          ), // NO TRUNCATION
+          Text(
+            _stripHtml(feat['description']), 
+            style: TextStyle(color: onSurface.withOpacity(0.4), fontSize: 11, fontWeight: FontWeight.bold),
+            maxLines: 2, overflow: TextOverflow.ellipsis,
+          ), 
         ],
       ),
     );
@@ -696,12 +739,10 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
                       Text("${course['total_materials'] ?? 0} ${lang.translate('materials_count')}", style: TextStyle(color: wsColor, fontSize: 11, fontWeight: FontWeight.w900)),
                     ] else ...[
                       const SizedBox(height: 4),
-                      ConstrainedBox(
-                        constraints: const BoxConstraints(maxHeight: 32),
-                        child: HtmlWidget(
-                          course['description'] ?? '', 
-                          textStyle: TextStyle(color: onSurface.withOpacity(0.5), fontSize: 11, height: 1.2, overflow: TextOverflow.ellipsis),
-                        ),
+                      Text(
+                        _stripHtml(course['description']),
+                        style: TextStyle(color: onSurface.withOpacity(0.5), fontSize: 11, height: 1.2, fontWeight: FontWeight.bold),
+                        maxLines: 2, overflow: TextOverflow.ellipsis,
                       ),
                     ],
                   ])),

@@ -4,9 +4,10 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:provider/provider.dart';
 import 'package:learnock_drm/providers/workspace_provider.dart';
 import 'package:learnock_drm/providers/language_provider.dart';
-import 'package:learnock_drm/providers/theme_provider.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
 import 'package:learnock_drm/widgets/premium_loader.dart';
+
+import '../models/workspace.dart';
 
 class OnboardingScreen extends StatefulWidget {
   const OnboardingScreen({super.key});
@@ -96,9 +97,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   Widget build(BuildContext context) {
     final wp = Provider.of<WorkspaceProvider>(context);
     final lang = Provider.of<LanguageProvider>(context);
+    final isRTL = lang.currentLocale.languageCode == 'ar';
     
     final backgroundColor = Theme.of(context).scaffoldBackgroundColor;
-    final cardColor = Theme.of(context).cardColor;
     final primaryColor = Theme.of(context).primaryColor;
     final onSurface = Theme.of(context).colorScheme.onSurface;
 
@@ -138,6 +139,30 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 13, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 40),
+              
+              if (wp.workspaces.isNotEmpty) ...[
+                Align(
+                  alignment: isRTL ? Alignment.centerRight : Alignment.centerLeft,
+                  child: Text(
+                    lang.translate('other_workspaces').toUpperCase(),
+                    style: TextStyle(color: onSurface.withOpacity(0.35), fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1.5),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                ListView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: wp.workspaces.length,
+                  itemBuilder: (context, i) {
+                    final w = wp.workspaces[i];
+                    return _buildAcademySelectionCard(context, w, wp, primaryColor, onSurface);
+                  },
+                ),
+                const SizedBox(height: 32),
+                Divider(color: Theme.of(context).dividerColor, thickness: 1),
+                const SizedBox(height: 32),
+              ],
+
               Container(
                 padding: const EdgeInsets.all(4),
                 decoration: BoxDecoration(color: Theme.of(context).dividerColor, borderRadius: BorderRadius.circular(16)),
@@ -282,6 +307,35 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildAcademySelectionCard(BuildContext context, Workspace w, WorkspaceProvider wp, Color primary, Color onSurface) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: Theme.of(context).cardColor,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Theme.of(context).dividerColor, width: 2),
+      ),
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        leading: Container(
+          width: 48, height: 48,
+          decoration: BoxDecoration(color: primary.withOpacity(0.1), shape: BoxShape.circle),
+          child: w.logoUrl != null 
+            ? ClipRRect(borderRadius: BorderRadius.circular(24), child: Image.network(w.logoUrl!, fit: BoxFit.contain, errorBuilder: (c,e,s) => Icon(Icons.school_rounded, color: primary)))
+            : Icon(Icons.school_rounded, color: primary),
+        ),
+        title: Text(w.name.toUpperCase(), style: TextStyle(color: onSurface, fontWeight: FontWeight.w900, fontSize: 13, letterSpacing: 0.5)),
+        subtitle: Text(w.studentName, style: TextStyle(color: onSurface.withOpacity(0.5), fontSize: 11, fontWeight: FontWeight.bold)),
+        trailing: Icon(Icons.arrow_forward_ios_rounded, size: 14, color: onSurface.withOpacity(0.2)),
+        onTap: () async {
+          setState(() => _isLoading = true);
+          await wp.switchWorkspace(w.id, context);
+          if (mounted) Navigator.pushReplacementNamed(context, '/dashboard');
+        },
+      ),
     );
   }
 }

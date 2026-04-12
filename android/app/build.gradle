@@ -15,12 +15,12 @@ if (localPropertiesFile.exists()) {
 
 def flutterVersionCode = localProperties.getProperty("flutter.versionCode")
 if (flutterVersionCode == null) {
-    flutterVersionCode = "11"
+    flutterVersionCode = "15"
 }
 
 def flutterVersionName = localProperties.getProperty("flutter.versionName")
 if (flutterVersionName == null) {
-    flutterVersionName = "11"
+    flutterVersionName = "15"
 }
 
 def keystoreProperties = new Properties()
@@ -58,8 +58,8 @@ android {
         applicationId = "com.omran_college.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 11
-        versionName = "1.0.11"
+        versionCode = 14
+        versionName = "1.0.14"
 
         externalNativeBuild {
             cmake {

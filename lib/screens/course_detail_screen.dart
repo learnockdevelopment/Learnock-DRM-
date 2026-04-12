@@ -158,9 +158,9 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
     final onSurface = Theme.of(context).colorScheme.onSurface;
     final materials = (course?['materials'] as List?) ?? [];
 
-    // ROBUST CATEGORY DETECTION (PRIORITIZE STRINGS OVER IDS)
-    String catStr = "";
-    if (course != null) {
+    // ROBUST CATEGORY DETECTION (PRIORITIZE category_path from new backend)
+    String catStr = (course?['category_path'] ?? course?['category_depth'] ?? "").toString();
+    if (catStr.isEmpty && course != null) {
       final catCandidates = [course['category_name'], course['category'], course['subject'], course['cat_name']];
       for (var c in catCandidates) {
         if (c == null) continue;
@@ -173,6 +173,8 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
         }
       }
     }
+
+    final isFavorited = course?['isFavorite'] == true || course?['is_favorited'] == true;
 
     if (_isLoading) return const Scaffold(backgroundColor: Color(0xFF000000), body: Center(child: PremiumLoader()));
     if (course == null) return Scaffold(backgroundColor: const Color(0xFF000000), body: Center(child: Text(lang.translate('failure'), style: const TextStyle(color: Colors.white24))));
@@ -344,14 +346,15 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
                 InkWell(
                   onTap: () async {
                      try {
-                        final res = await wp.toggleFavorite(widget.courseId);
+                        await wp.toggleFavorite(widget.courseId);
                         setState(() {
-                           if (courseObj is Map<String, dynamic>) {
-                              courseObj['is_favorited'] = !(courseObj['is_favorited'] ?? false);
+                           if (course != null) {
+                              course['isFavorite'] = !isFavorited;
+                              course['is_favorited'] = !isFavorited;
                            }
                         });
                         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                          content: Text(course?['is_favorited'] == true ? "Saved to Favorites" : "Removed from Favorites"),
+                          content: Text(!isFavorited ? "Saved to Favorites" : "Removed from Favorites"),
                           behavior: SnackBarBehavior.floating,
                           width: 250,
                           backgroundColor: Colors.white,
@@ -364,9 +367,9 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
                   child: Padding(
                     padding: const EdgeInsets.symmetric(vertical: 8),
                     child: _buildQuickAction(
-                      (course?['is_favorited'] ?? false) ? Icons.favorite_rounded : Icons.favorite_border_rounded, 
-                      (course?['is_favorited'] ?? false) ? "REMOVED FROM FAVORITES" : "SAVE IN FAVORITES",
-                      (course?['is_favorited'] ?? false) ? primaryColor : Colors.white
+                      isFavorited ? Icons.favorite_rounded : Icons.favorite_border_rounded, 
+                      isFavorited ? "REMOVED FROM FAVORITES" : "SAVE IN FAVORITES",
+                      isFavorited ? primaryColor : Colors.white
                     ),
                   ),
                 ),

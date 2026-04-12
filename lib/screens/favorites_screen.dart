@@ -265,6 +265,12 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
     );
   }
 
+  String _stripHtml(String? html) {
+    if (html == null) return '';
+    RegExp exp = RegExp(r"<[^>]*>", multiLine: true, caseSensitive: true);
+    return html.replaceAll(exp, '').trim();
+  }
+
   Widget _buildCourseCard(BuildContext context, Map<String, dynamic> course, Color primary, Color onSurface, LanguageProvider lang) {
     final isFavorite = course['is_favorite'] == true || course['isFavorite'] == true;
     return Container(
@@ -333,10 +339,11 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
                   ],
                   Text(course['title'] ?? '', style: TextStyle(color: onSurface, fontSize: 16, fontWeight: FontWeight.w900, letterSpacing: -0.2)),
                   const SizedBox(height: 8),
-                  HtmlWidget(
-                    course['description'] ?? '', 
-                    textStyle: TextStyle(color: onSurface.withOpacity(0.6), fontSize: 13, height: 1.5, fontWeight: FontWeight.bold),
-                  ), // NO TRUNCATION
+                  Text(
+                    _stripHtml(course['description']), 
+                    style: TextStyle(color: onSurface.withOpacity(0.6), fontSize: 13, height: 1.5, fontWeight: FontWeight.bold),
+                    maxLines: 2, overflow: TextOverflow.ellipsis,
+                  ),
                   const SizedBox(height: 20),
                   Row(
                     children: [
