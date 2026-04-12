@@ -150,7 +150,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             if (joinedGroups.isNotEmpty) ...[
               _buildSectionHeader(context, lang.translate('my_current_groups') ?? 'MY CURRENT GROUPS'),
               const SizedBox(height: 12),
-              ...joinedGroups.map((g) => _buildGroupCard(context, g, primaryColor, onSurface)),
+              ...joinedGroups.map((g) => _buildGroupCard(context, g, primaryColor, onSurface, lang)),
               const SizedBox(height: 24),
             ],
 
@@ -159,7 +159,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             if (_isGroupsLoading) const Padding(padding: EdgeInsets.symmetric(vertical: 20), child: PremiumLoader(size: 30))
             else if (availableGroups.isEmpty && joinedGroups.isEmpty) Text(lang.translate('no_groups') ?? 'No groups available', style: TextStyle(color: onSurface.withOpacity(0.3), fontSize: 11, fontWeight: FontWeight.bold))
             else if (availableGroups.isEmpty) Text(lang.translate('all_joined') ?? 'You have joined all available groups', style: TextStyle(color: onSurface.withOpacity(0.3), fontSize: 11, fontWeight: FontWeight.bold))
-            else ...availableGroups.map((g) => _buildGroupCard(context, g, primaryColor, onSurface)),
+            else ...availableGroups.map((g) => _buildGroupCard(context, g, primaryColor, onSurface, lang)),
             
             const SizedBox(height: 32),
 
@@ -189,7 +189,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _buildGroupCard(BuildContext context, Map<String, dynamic> g, Color primary, Color onSurface) {
+  Widget _buildGroupCard(BuildContext context, Map<String, dynamic> g, Color primary, Color onSurface, LanguageProvider lang) {
     bool isMember = g['is_member'] == true || g['is_member'] == 1 || g['is_member'] == 'true';
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
