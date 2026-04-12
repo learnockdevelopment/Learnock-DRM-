@@ -1,6 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class ThemeProvider extends ChangeNotifier {
+  static const _storage = FlutterSecureStorage();
+  static const _kDarkModeKey = 'theme_is_dark';
+
   bool _isDarkMode = true;
   String? _currentTheme;
   String? _currentThemeColor;
@@ -10,9 +15,26 @@ class ThemeProvider extends ChangeNotifier {
   String? get currentThemeColor => _currentThemeColor;
 
   ThemeData get themeData => _generateThemeData(_isDarkMode, _currentTheme, _currentThemeColor);
+  ThemeData get lightThemeData => _generateThemeData(false, _currentTheme, _currentThemeColor);
+  ThemeData get darkThemeData => _generateThemeData(true, _currentTheme, _currentThemeColor);
+
+  // Restore saved preference; fall back to system brightness
+  Future<void> init() async {
+    try {
+      final saved = await _storage.read(key: _kDarkModeKey);
+      if (saved != null) {
+        _isDarkMode = saved == 'true';
+      } else {
+        // No saved preference — follow system dark/light setting
+        _isDarkMode = SchedulerBinding.instance.platformDispatcher.platformBrightness == Brightness.dark;
+      }
+      notifyListeners();
+    } catch (_) {}
+  }
 
   void toggleTheme() {
     _isDarkMode = !_isDarkMode;
+    _storage.write(key: _kDarkModeKey, value: _isDarkMode.toString());
     notifyListeners();
   }
 
@@ -43,10 +65,10 @@ class ThemeProvider extends ChangeNotifier {
 
   ThemeData _generateThemeData(bool isDark, String? themeName, String? themeColorHex) {
     final t = themeName?.toLowerCase() ?? 'default';
-    
+
     // DEFAULT (EMERALD) - Base SaaS Palette
     Color primary = isDark ? fromHSL(160, 50, 65) : fromHSL(160, 85, 40);
-    
+
     // OVERRIDE WITH THEME COLOR FROM API IF VALID
     if (themeColorHex != null && themeColorHex.contains('#')) {
       final String pureHex = themeColorHex.split('#').last;
@@ -54,7 +76,7 @@ class ThemeProvider extends ChangeNotifier {
         primary = Color(int.parse("0xff$pureHex"));
       }
     } else {
-      // DYNAMIC BRAND MAPPINGS (Midnight, Forest, Royal, etc.)
+      // DYNAMIC BRAND MAPPINGS
       if (t == 'midnight' || t == 'slate' || t == 'dark') {
         primary = isDark ? fromHSL(230, 85, 60) : fromHSL(225, 80, 55);
       } else if (t == 'forest' || t == 'green') {
@@ -83,9 +105,19 @@ class ThemeProvider extends ChangeNotifier {
       scaffoldBackgroundColor: scaffoldBg,
       cardColor: cardColor,
       dividerColor: divider,
-      colorScheme: isDark 
-        ? ColorScheme.dark(primary: primary, surface: cardColor, onSurface: Colors.white, onSurfaceVariant: Colors.white.withOpacity(0.6))
-        : ColorScheme.light(primary: primary, surface: cardColor, onSurface: const Color(0xFF0F172A), onSurfaceVariant: const Color(0xFF64748B)),
+      colorScheme: isDark
+          ? ColorScheme.dark(
+              primary: primary,
+              surface: cardColor,
+              onSurface: Colors.white,
+              onSurfaceVariant: Colors.white.withOpacity(0.6),
+            )
+          : ColorScheme.light(
+              primary: primary,
+              surface: cardColor,
+              onSurface: const Color(0xFF0F172A),
+              onSurfaceVariant: const Color(0xFF64748B),
+            ),
       textTheme: TextTheme(
         headlineLarge: TextStyle(color: isDark ? Colors.white : const Color(0xFF0F172A), fontWeight: FontWeight.w900),
         titleLarge: TextStyle(color: isDark ? Colors.white : const Color(0xFF0F172A), fontWeight: FontWeight.w800),

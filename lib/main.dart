@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:no_screenshot/no_screenshot.dart';
-import 'package:safe_device/safe_device.dart';
 import 'package:learnock_drm/providers/workspace_provider.dart';
 import 'package:learnock_drm/providers/language_provider.dart';
 import 'package:learnock_drm/screens/splash_screen.dart';
@@ -13,7 +12,6 @@ import 'package:learnock_drm/screens/profile_screen.dart';
 import 'package:learnock_drm/screens/faqs_screen.dart';
 import 'package:learnock_drm/screens/courses_screen.dart';
 import 'package:learnock_drm/screens/highlights_screen.dart';
-import 'package:learnock_drm/screens/subscribe_screen.dart';
 import 'package:learnock_drm/screens/favorites_screen.dart';
 import 'package:learnock_drm/screens/transactions_screen.dart';
 import 'package:learnock_drm/screens/wallet_screen.dart';
@@ -30,12 +28,15 @@ void main() async {
     debugPrint('Security Error: $e');
   }
 
+  final themeProvider = ThemeProvider();
+  await themeProvider.init();
+
   runApp(
     MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => WorkspaceProvider()),
         ChangeNotifierProvider(create: (_) => LanguageProvider()),
-        ChangeNotifierProvider(create: (_) => ThemeProvider()),
+        ChangeNotifierProvider(create: (_) => themeProvider),
       ],
       child: const DerasyApp(),
     ),
@@ -49,6 +50,12 @@ class DerasyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return Consumer2<LanguageProvider, ThemeProvider>(
       builder: (context, lang, theme, child) {
+        final lightThemeData = theme.lightThemeData.copyWith(
+          textTheme: GoogleFonts.rubikTextTheme(theme.lightThemeData.textTheme),
+        );
+        final darkThemeData = theme.darkThemeData.copyWith(
+          textTheme: GoogleFonts.rubikTextTheme(theme.darkThemeData.textTheme),
+        );
         return MaterialApp(
           title: 'Learnock Player',
           debugShowCheckedModeBanner: false,
@@ -58,13 +65,13 @@ class DerasyApp extends StatelessWidget {
             GlobalWidgetsLocalizations.delegate,
             GlobalCupertinoLocalizations.delegate,
           ],
-          supportedLocales: const [ 
+          supportedLocales: const [
             Locale('en'),
             Locale('ar'),
           ],
-          theme: theme.themeData.copyWith(
-            textTheme: GoogleFonts.rubikTextTheme(theme.themeData.textTheme),
-          ),
+          theme: lightThemeData,
+          darkTheme: darkThemeData,
+          themeMode: theme.isDarkMode ? ThemeMode.dark : ThemeMode.light,
           initialRoute: '/',
           routes: {
             '/': (context) => const SplashScreen(),
@@ -76,10 +83,6 @@ class DerasyApp extends StatelessWidget {
             '/favorites': (context) => const FavoritesScreen(),
             '/transactions': (context) => const TransactionsScreen(),
             '/highlights': (context) => const HighlightsScreen(),
-            '/subscribe': (context) {
-              final Map<String, dynamic>? args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
-              return SubscribeScreen(course: args ?? {});
-            },
             '/wallet': (context) => const WalletScreen(),
           },
           onGenerateRoute: (settings) {
@@ -90,7 +93,7 @@ class DerasyApp extends StatelessWidget {
             if (settings.name == '/material') {
               final args = settings.arguments as Map<String, dynamic>;
               return MaterialPageRoute(builder: (context) => MaterialViewerScreen(
-                material: args['material'], 
+                material: args['material'],
                 courseId: args['courseId'],
                 forceLandscape: args['forceLandscape'] ?? false,
                 nextMaterial: args['nextMaterial'],

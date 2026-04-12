@@ -15,6 +15,7 @@ class WorkspaceProvider with ChangeNotifier {
   bool _isInitialized = false;
   bool _isEagerLoaded = false;
   final Map<int, Map<String, dynamic>> _lastAccessedMaterials = {};
+  final Set<int> _localFavoriteIds = {}; // TRUTH FOR OPTIMISTIC FAVS (Shared across screens)
 
 
   bool get isInitialized => _isInitialized;
@@ -24,6 +25,7 @@ class WorkspaceProvider with ChangeNotifier {
   Map<String, dynamic>? get cachedWallet => _cachedWallet;
   Map<String, dynamic>? get cachedME => _cachedME;
   Map<int, Map<String, dynamic>> get lastAccessedMaterials => _lastAccessedMaterials;
+  Set<int> get localFavoriteIds => _localFavoriteIds;
 
 
   Workspace? get activeWorkspace => _apiService.activeWorkspace;
@@ -58,8 +60,14 @@ class WorkspaceProvider with ChangeNotifier {
       _cachedFavorites = results[2] as Map<String, dynamic>;
       _cachedWallet = results[3] as Map<String, dynamic>;
       _cachedME = results[4] as Map<String, dynamic>;
+      
+      // SYNC FAVORITES SET
+      final List favs = (_cachedFavorites?['favorites'] as List?) ?? [];
+      _localFavoriteIds.clear();
+      _localFavoriteIds.addAll(favs.map((f) => int.tryParse(f['id']?.toString() ?? '0') ?? 0).where((id) => id != 0));
+
       _isEagerLoaded = true;
-      debugPrint('🚀 EAGER LOAD COMPLETE: All data cached.');
+      debugPrint('🚀 EAGER LOAD COMPLETE: All data cached. Favs: ${_localFavoriteIds.length}');
     } catch (e) {
       debugPrint('❌ Eager Load Error: $e');
     }
@@ -201,6 +209,41 @@ class WorkspaceProvider with ChangeNotifier {
   }
   
   Future<Map<String, dynamic>> toggleFavorite(int courseId) => _apiService.toggleFavorite(courseId);
+
+  Future<void> toggleFavoriteOptimistic(int courseId) async {
+    final bool wasFav = _localFavoriteIds.contains(courseId);
+    
+    // 1. UPDATE LOCALLY FIRST (notify all screens)
+    if (wasFav) {
+      _localFavoriteIds.remove(courseId);
+    } else {
+      _localFavoriteIds.add(courseId);
+    }
+    notifyListeners();
+
+    // 2. BACKEND SYNC
+    try {
+      await _apiService.toggleFavorite(courseId);
+      // Optional: re-fetch favorites list in background to keep full movie objects fresh
+      getFavorites().then((res) {
+        _cachedFavorites = res;
+        final List favs = (res['favorites'] as List?) ?? [];
+        _localFavoriteIds.clear();
+        _localFavoriteIds.addAll(favs.map((f) => int.tryParse(f['id']?.toString() ?? '0') ?? 0).where((id) => id != 0));
+        notifyListeners();
+      });
+    } catch (e) {
+      // REVERT ON ERROR
+      if (wasFav) {
+        _localFavoriteIds.add(courseId);
+      } else {
+        _localFavoriteIds.remove(courseId);
+      }
+      notifyListeners();
+      rethrow;
+    }
+  }
+
   Future<Map<String, dynamic>> getFavorites() => _apiService.getFavorites();
 
   Future<Map<String, dynamic>> redeemCoupon(String code) => _apiService.redeemCoupon(code);

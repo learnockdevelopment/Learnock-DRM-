@@ -54,16 +54,13 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
     final Set<int> enrolledIds = enrolled.map((e) => int.tryParse(e['id']?.toString() ?? '0') ?? 0).toSet();
     
     final List favs = (favRes['favorites'] as List?) ?? [];
-    
+    final Set<int> favIds = favs.map((f) => int.tryParse(f['id']?.toString() ?? '0') ?? 0).toSet();
+
     if (mounted) {
       setState(() {
         _favoriteCourses = favs.map((f) {
            final fmap = Map<String, dynamic>.from(f);
            final fid = int.tryParse(fmap['id']?.toString() ?? '0') ?? 0;
-           fmap['enrolled'] = enrolledIds.contains(fid);
-           fmap['is_favorite'] = true;
-           fmap['isFavorite'] = true;
-           return fmap;
         }).toList();
       });
     }
@@ -75,91 +72,43 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
     final cid = int.tryParse(course['id']?.toString() ?? '0') ?? 0;
     if (cid == 0) return;
 
-    setState(() => _isLoading = true);
-    try {
-      final bool wasFav = course['is_favorite'] == true || course['isFavorite'] == true;
-      final bool isFav = !wasFav;
-      
+    final bool newFav = !wp.localFavoriteIds.contains(cid);
+
+    // ✅ OPTIMISTIC UI — Remove from visible list immediately if unfavoriting
+    if (!newFav) {
       setState(() {
-        course['is_favorite'] = isFav;
-        course['isFavorite'] = isFav;
+        _favoriteCourses.removeWhere((c) => (int.tryParse(c['id']?.toString() ?? '0') ?? 0) == cid);
       });
-      
-      await wp.toggleFavorite(cid);
-      
-      // Attempt to immediately sync changes with local cache
-      await _fetch();
-      
-      if (mounted) {
-        showDialog(
-          context: context,
-          builder: (context) => AlertDialog(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const SizedBox(height: 24),
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(color: Colors.green.withOpacity(0.1), shape: BoxShape.circle),
-                  child: const Icon(Icons.check_circle_rounded, color: Colors.green, size: 48),
-                ),
-                const SizedBox(height: 24),
-                Text(lang.translate('success') ?? 'Success!', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18)),
-                const SizedBox(height: 8),
-                Text(isFav ? (lang.translate('added_to_favorites') ?? 'Added to favorites successfully.') : (lang.translate('removed_from_favorites') ?? 'Removed from favorites.'), textAlign: TextAlign.center, style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6))),
-                const SizedBox(height: 24),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(backgroundColor: Theme.of(context).primaryColor, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)), padding: const EdgeInsets.symmetric(vertical: 16)),
-                    onPressed: () {
-                      Navigator.pop(context);
-                      _fetch();
-                    },
-                    child: Text(lang.translate('confirm') ?? 'OK', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      }
+    }
+
+    ScaffoldMessenger.of(context).clearSnackBars();
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Row(children: [
+        Icon(newFav ? Icons.favorite_rounded : Icons.favorite_border_rounded, color: Colors.white, size: 16),
+        const SizedBox(width: 10),
+        Text(newFav ? (lang.translate('added_to_favorites') ?? 'Added to favorites') : (lang.translate('removed_from_favorites') ?? 'Removed from favorites')),
+      ]),
+      backgroundColor: newFav ? Colors.green.shade700 : Colors.grey.shade700,
+      behavior: SnackBarBehavior.floating,
+      duration: const Duration(seconds: 2),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+    ));
+
+    try {
+      await wp.toggleFavoriteOptimistic(cid);
     } catch (e) {
       if (mounted) {
-        showDialog(
-          context: context,
-          builder: (context) => AlertDialog(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const SizedBox(height: 24),
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(color: Colors.red.withOpacity(0.1), shape: BoxShape.circle),
-                  child: const Icon(Icons.error_rounded, color: Colors.red, size: 48),
-                ),
-                const SizedBox(height: 24),
-                Text(lang.translate('failure') ?? 'Error', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18)),
-                const SizedBox(height: 8),
-                Text(e.toString().replaceAll('Exception: ', ''), textAlign: TextAlign.center, style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6))),
-                const SizedBox(height: 24),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(backgroundColor: Colors.red, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)), padding: const EdgeInsets.symmetric(vertical: 16)),
-                    onPressed: () => Navigator.pop(context),
-                    child: Text(lang.translate('confirm') ?? 'OK', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
+        // RE-FETCH ON ERROR TO RESTORE THE CARD IF IT WAS REMOVED
+        _fetch(); 
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(e.toString().replaceAll('Exception: ', '')),
+          backgroundColor: Colors.red.shade700,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        ));
       }
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -272,7 +221,9 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
   }
 
   Widget _buildCourseCard(BuildContext context, Map<String, dynamic> course, Color primary, Color onSurface, LanguageProvider lang) {
-    final isFavorite = course['is_favorite'] == true || course['isFavorite'] == true;
+    final wp = Provider.of<WorkspaceProvider>(context);
+    final cid = int.tryParse(course['id']?.toString() ?? '0') ?? 0;
+    final isFavorite = wp.localFavoriteIds.contains(cid);
     return Container(
       decoration: BoxDecoration(
         color: Theme.of(context).cardColor,
@@ -281,13 +232,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
       ),
       child: InkWell(
         onTap: () {
-          final e = course['enrolled'];
-          final isEnrolled = e == true || e == 1 || e == '1' || e == 'true';
           final cid = int.tryParse(course['id']?.toString() ?? '0') ?? 0;
-          if (!isEnrolled) {
-            Navigator.pushNamed(context, '/subscribe', arguments: course);
-            return;
-          }
           if (cid > 0) Navigator.pushNamed(context, '/course', arguments: cid);
         },
         borderRadius: BorderRadius.circular(24),
@@ -310,17 +255,17 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
                       child: Text("${course['price']} ${lang.translate('currency_le')}", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 13)),
                     ),
                   ),
-                  Positioned(
+                   Positioned(
                      top: 12, left: 12,
                      child: InkWell(
-                       onTap: _isLoading ? null : () => _toggleFavorite(course),
+                       onTap: () => _toggleFavorite(course), // always instant
                        child: Container(
                          padding: const EdgeInsets.all(8),
                          decoration: BoxDecoration(color: Colors.white, shape: BoxShape.circle, boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 4)]),
                          child: Icon(isFavorite ? Icons.favorite_rounded : Icons.favorite_border_rounded, color: isFavorite ? Colors.red : Colors.grey, size: 20),
                        ),
                      ),
-                  ),
+                   ),
                 ],
               ),
             ),

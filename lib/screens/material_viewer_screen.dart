@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:no_screenshot/no_screenshot.dart';
 import 'package:google_fonts/google_fonts.dart' as modern_fonts;
@@ -11,11 +12,9 @@ import 'package:flutter_pdfview/flutter_pdfview.dart';
 import 'package:learnock_drm/widgets/premium_loader.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:http/http.dart' as http;
+import 'dart:async';
 import 'dart:io';
 
-import 'package:flutter/services.dart';
-
-import 'dart:async';
 
 class MaterialViewerScreen extends StatefulWidget {
   final Map<String, dynamic> material;
@@ -36,6 +35,7 @@ class _MaterialViewerScreenState extends State<MaterialViewerScreen> {
   bool _isLandscapeMode = false;
   bool _showNextHint = false;
   int _remainingSeconds = 0;
+  Timer? _hideHintTimer; // 5-second auto-hide timer for next video card
 
   @override
   void initState() {
@@ -58,10 +58,10 @@ class _MaterialViewerScreenState extends State<MaterialViewerScreen> {
     if (_videoPlayerController == null) return;
     final value = _videoPlayerController!.value;
     if (!value.isInitialized) return;
-    
+
     final duration = value.duration;
     final position = value.position;
-    
+
     // AUTO-PLAY NEXT ON COMPLETION
     if (position >= duration && duration > Duration.zero && widget.nextMaterial != null) {
       _videoPlayerController!.removeListener(_videoListener);
@@ -70,23 +70,22 @@ class _MaterialViewerScreenState extends State<MaterialViewerScreen> {
     }
 
     final remaining = duration - position;
-    
+
     if (widget.nextMaterial != null && remaining.inSeconds <= 60 && remaining.inSeconds > 0) {
       if (!_showNextHint) {
-        setState(() {
-          _showNextHint = true;
+        setState(() => _showNextHint = true);
+        // Start 5-second auto-hide timer when hint first appears
+        _hideHintTimer?.cancel();
+        _hideHintTimer = Timer(const Duration(seconds: 5), () {
+          if (mounted) setState(() => _showNextHint = false);
         });
       }
-      // ONLY UPDATE IF SECONDS CHANGED TO SAVE REBUILDS
       if (_remainingSeconds != remaining.inSeconds) {
-        setState(() {
-          _remainingSeconds = remaining.inSeconds;
-        });
+        setState(() => _remainingSeconds = remaining.inSeconds);
       }
     } else if (_showNextHint) {
-      setState(() {
-        _showNextHint = false;
-      });
+      setState(() => _showNextHint = false);
+      _hideHintTimer?.cancel();
     }
   }
 
@@ -95,37 +94,39 @@ class _MaterialViewerScreenState extends State<MaterialViewerScreen> {
       final wp = Provider.of<WorkspaceProvider>(context, listen: false);
       Map<String, dynamic> material = widget.material;
       final type = material['type']?.toString().toLowerCase();
-      
-      // OPTIONAL: RE-FETCH FROM /LEARN IF URL IS EMPTY (REVISED FLOW)
-      final mid = int.tryParse(material['id']?.toString() ?? '0') ?? 0;
-      if (widget.courseId != null && mid != 0) {
-         try {
-           final learnData = await wp.getCourseLearn(widget.courseId!);
-           final List learnMaterials = (learnData['materials'] ?? []);
-           final enriched = learnMaterials.firstWhere((m) => int.tryParse(m['id']?.toString() ?? '0') == mid, orElse: () => null);
-           if (enriched != null) {
-              material = Map<String, dynamic>.from(enriched);
-              debugPrint('✅ Enriched Material from /learn endpoint');
-           }
-         } catch (e) {
-           debugPrint('ℹ️ /learn fetch failed (using original metadata): $e');
-         }
-      }
 
-      // COMPREHENSIVE URL EXTRACTION
-      String directUrl = material['link_url']?.toString() ?? 
-                         material['content_url']?.toString() ?? 
+      // COMPREHENSIVE URL EXTRACTION — use content_url directly from course API
+      String directUrl = material['content_url']?.toString() ?? 
+                         material['link_url']?.toString() ?? 
                          material['file_path']?.toString() ?? 
                          material['url']?.toString() ?? 
                          material['video_url']?.toString() ?? 
                          material['stream_url']?.toString() ?? '';
-      
-      // BUNNY FALLBACK (IF SDK IS REMOVED BUT VIDEOS REMAIN)
+
+      // BUNNY FALLBACK
       if (directUrl.isEmpty && (material['bunny_video_id'] != null || material['bunny_id'] != null)) {
          final vid = material['bunny_video_id'] ?? material['bunny_id'];
-         // Construct standard Bunny HLS endpoint
          directUrl = "https://iframe.mediadelivery.net/hls/$vid/playlist.m3u8";
          debugPrint('🎬 Bunny Fallback URL: $directUrl');
+      }
+
+      // If URL still empty, try /learn endpoint as last resort
+      if (directUrl.isEmpty && widget.courseId != null) {
+         try {
+           final mid = int.tryParse(material['id']?.toString() ?? '0') ?? 0;
+           final learnData = await wp.getCourseLearn(widget.courseId!);
+           final List learnMaterials = learnData['materials'] ?? [];
+           final enriched = learnMaterials.firstWhere(
+             (m) => int.tryParse(m['id']?.toString() ?? '0') == mid,
+             orElse: () => null,
+           );
+           if (enriched != null) {
+              directUrl = enriched['content_url']?.toString() ?? '';
+              debugPrint('✅ URL from /learn: $directUrl');
+           }
+         } catch (e) {
+           debugPrint('ℹ️ /learn fetch failed: $e');
+         }
       }
 
       if (type == 'pdf' || type == 'document' || type == 'pdf_file') {
@@ -135,19 +136,22 @@ class _MaterialViewerScreenState extends State<MaterialViewerScreen> {
          if (mounted) setState(() => _isLoading = false);
       } else {
          debugPrint('🚀 Initializing Video: $directUrl');
-         _initVideo(directUrl, wp.activeWorkspace?.host);
-         // _isLoading will be set to false inside _initVideo once initialized
+         await _initVideo(directUrl, wp.activeWorkspace?.host);
       }
-      
-      // MARK PROGRESS
-      final courseIdVal = widget.courseId ?? int.tryParse(material['course_id']?.toString() ?? '0') ?? 0;
-      if (courseIdVal != 0) await wp.markProgress(courseIdVal, material);
-      
+
+      // MARK PROGRESS (non-blocking — don't let it fail the whole fetch)
+      try {
+        final courseIdVal = widget.courseId ?? int.tryParse(material['course_id']?.toString() ?? '0') ?? 0;
+        if (courseIdVal != 0) await wp.markProgress(courseIdVal, material);
+      } catch (e) {
+        debugPrint('Progress mark failed (non-fatal): $e');
+      }
+
     } catch (e) {
       debugPrint('Content Load Error: $e');
       if (mounted) {
         setState(() => _isLoading = false);
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e")));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error loading content: $e")));
       }
     }
   }
@@ -180,17 +184,21 @@ class _MaterialViewerScreenState extends State<MaterialViewerScreen> {
     }
   }
 
-  void _initVideo(String url, String? host) {
+  Future<void> _initVideo(String url, String? host) async {
     if (url.isEmpty) {
+      debugPrint('⚠️ Empty video URL — cannot play');
       if (mounted) setState(() => _isLoading = false);
       return;
     }
+
+    // Capture theme colors synchronously BEFORE any async work
+    final primaryColor = Theme.of(context).primaryColor;
 
     String streamUrl = url;
     if (url.contains('<iframe')) {
       streamUrl = RegExp(r'src="([^"]+)"').firstMatch(url)?.group(1) ?? url;
     }
-    
+
     // AUTO-CONVERT BUNNY PLAYER URLS TO HLS STREAMS
     if (streamUrl.contains('iframe.mediadelivery.net') && !streamUrl.contains('.m3u8')) {
       try {
@@ -206,14 +214,20 @@ class _MaterialViewerScreenState extends State<MaterialViewerScreen> {
       }
     }
 
-    // Add Referer for security/403 bypass
     final Map<String, String> httpHeaders = {
-      'Referer': host != null ? 'https://$host/' : 'https://iframe.mediadelivery.net/',
-      'User-Agent': 'DerasyPlayer/1.0',
-      'Origin': host != null ? 'https://$host' : 'https://iframe.mediadelivery.net',
+      'Referer': host != null ? 'https://$host/' : 'https://learnock.com/',
+      'User-Agent': 'Mozilla/5.0 DerasyPlayer/1.0',
+      'Origin': host != null ? 'https://$host' : 'https://learnock.com',
     };
 
     debugPrint('🎬 Initializing Source: $streamUrl');
+
+    // Dispose any previous controller cleanly
+    _videoPlayerController?.removeListener(_videoListener);
+    await _videoPlayerController?.dispose();
+    _chewieController?.dispose();
+    _videoPlayerController = null;
+    _chewieController = null;
 
     try {
       _videoPlayerController = VideoPlayerController.networkUrl(
@@ -226,9 +240,25 @@ class _MaterialViewerScreenState extends State<MaterialViewerScreen> {
       if (mounted) setState(() => _isLoading = false);
       return;
     }
-    
+
+    // ✅ INITIALIZE FIRST — then create ChewieController
+    try {
+      await _videoPlayerController!.initialize();
+    } catch (e) {
+      debugPrint('❌ Video Initialize Error: $e');
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Video playback error: $e'), backgroundColor: Colors.red),
+        );
+      }
+      return;
+    }
+
+    if (!mounted) return;
+
     _videoPlayerController!.addListener(_videoListener);
-    
+
     _chewieController = ChewieController(
       videoPlayerController: _videoPlayerController!,
       autoPlay: true,
@@ -237,52 +267,42 @@ class _MaterialViewerScreenState extends State<MaterialViewerScreen> {
       allowFullScreen: true,
       allowPlaybackSpeedChanging: true,
       playbackSpeeds: [0.5, 1.0, 1.5, 2.0],
-      aspectRatio: 16 / 9,
-      autoInitialize: true, // Let Chewie handle core init
-      // PERFORMANCE TWEAKS
+      aspectRatio: _videoPlayerController!.value.aspectRatio > 0
+          ? _videoPlayerController!.value.aspectRatio
+          : 16 / 9,
+      autoInitialize: false, // Already initialized above
       allowedScreenSleep: false,
       isLive: false,
-      errorBuilder: (context, errorMessage) {
-        return Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.error_outline_rounded, color: Colors.redAccent, size: 42),
-              const SizedBox(height: 16),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 40.0),
-                child: Text(
-                  "Playback Error: $errorMessage\nEnsure you have an active internet connection.",
-                  style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
-                  textAlign: TextAlign.center,
-                ),
+      errorBuilder: (context, errorMessage) => Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.error_outline_rounded, color: Colors.redAccent, size: 42),
+            const SizedBox(height: 16),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 40),
+              child: Text(
+                'Playback Error: $errorMessage',
+                style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                textAlign: TextAlign.center,
               ),
-              const SizedBox(height: 16),
-              TextButton.icon(
-                onPressed: () {
-                  setState(() {
-                    _isLoading = true;
-                    _initVideo(url, host);
-                  });
-                },
-                icon: const Icon(Icons.refresh_rounded, size: 14),
-                label: const Text("RETRY PLAYBACK", style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900)),
-              )
-            ],
-          ),
-        );
-      },
-      cupertinoProgressColors: ChewieProgressColors(playedColor: Theme.of(context).primaryColor, bufferedColor: Colors.white24, handleColor: Theme.of(context).primaryColor),
-      materialProgressColors: ChewieProgressColors(playedColor: Theme.of(context).primaryColor, bufferedColor: Colors.white24, handleColor: Theme.of(context).primaryColor),
+            ),
+            const SizedBox(height: 16),
+            TextButton.icon(
+              onPressed: () => setState(() { _isLoading = true; _initVideo(url, host); }),
+              icon: const Icon(Icons.refresh_rounded, size: 14),
+              label: const Text('RETRY', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900)),
+            ),
+          ],
+        ),
+      ),
+      cupertinoProgressColors: ChewieProgressColors(
+        playedColor: primaryColor, bufferedColor: Colors.white24, handleColor: primaryColor),
+      materialProgressColors: ChewieProgressColors(
+        playedColor: primaryColor, bufferedColor: Colors.white24, handleColor: primaryColor),
     );
 
-    // Initial load tracking
-    _videoPlayerController!.initialize().then((_) {
-       if (mounted) setState(() => _isLoading = false);
-    }).catchError((e) {
-       debugPrint('❌ Video Init Error: $e');
-       if (mounted) setState(() => _isLoading = false);
-    });
+    if (mounted) setState(() => _isLoading = false);
   }
 
   void _playNext() {
@@ -308,6 +328,7 @@ class _MaterialViewerScreenState extends State<MaterialViewerScreen> {
 
   @override
   void dispose() {
+    _hideHintTimer?.cancel();
     _videoPlayerController?.removeListener(_videoListener);
     _videoPlayerController?.dispose();
     _chewieController?.dispose();

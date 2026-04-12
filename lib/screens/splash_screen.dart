@@ -97,9 +97,9 @@ class _SplashScreenState extends State<SplashScreen>
     if (_securityFailure) return _buildSecurityLockUI();
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: Center(
-        child: PremiumLoader(color: const Color(0xFF6366f1), useAppLogoOnly: true), 
+        child: PremiumLoader(color: Theme.of(context).primaryColor, useAppLogoOnly: true),
       ),
     );
   }

@@ -5,7 +5,6 @@ import 'package:learnock_drm/providers/language_provider.dart';
 import 'dart:convert';
 import 'dart:io' as io;
 import 'package:learnock_drm/widgets/premium_loader.dart';
-import 'package:flutter_widget_from_html_core/flutter_widget_from_html_core.dart';
 
 class CoursesScreen extends StatefulWidget {
   const CoursesScreen({super.key});
@@ -75,18 +74,12 @@ class _CoursesScreenState extends State<CoursesScreen> {
         _availableCourses = allCoursesRaw.map((c) {
           final map = Map<String, dynamic>.from(c);
           final cid = int.tryParse(map['id']?.toString() ?? '0') ?? 0;
-          
           final dynamic e = map['enrolled'] ?? map['is_enrolled'] ?? map['is_purchased'] ?? map['is_admitted'] ?? map['isEnrolled'] ?? enrolledIds.contains(cid);
           final bool alreadyEnrolledByFlag = e == true || e == 1 || e == '1' || e == 'true';
-          map['enrolled'] = alreadyEnrolledByFlag; 
-          
+          map['enrolled'] = alreadyEnrolledByFlag || enrolledIds.contains(cid);
           map['is_favorite'] = favoriteIds.contains(cid);
           return map;
-        }).where((c) {
-          final cid = int.tryParse(c['id']?.toString() ?? '0') ?? 0;
-          final bool alreadyEnrolled = enrolledIds.contains(cid) || (c['enrolled'] == true);
-          return !alreadyEnrolled && cid > 0;
-        }).toList();
+        }).where((c) => (int.tryParse(c['id']?.toString() ?? '0') ?? 0) > 0).toList();
       });
     }
   }
@@ -97,91 +90,39 @@ class _CoursesScreenState extends State<CoursesScreen> {
     final cid = int.tryParse(course['id']?.toString() ?? '0') ?? 0;
     if (cid == 0) return;
 
-    setState(() => _isLoading = true);
+    final bool newFav = !wp.localFavoriteIds.contains(cid);
+
+    ScaffoldMessenger.of(context).clearSnackBars();
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Row(children: [
+        Icon(newFav ? Icons.favorite_rounded : Icons.favorite_border_rounded, color: Colors.white, size: 16),
+        const SizedBox(width: 10),
+        Text(newFav ? (lang.translate('added_to_favorites') ?? 'Added to favorites') : (lang.translate('removed_from_favorites') ?? 'Removed from favorites')),
+      ]),
+      backgroundColor: newFav ? Colors.green.shade700 : Colors.grey.shade700,
+      behavior: SnackBarBehavior.floating,
+      duration: const Duration(seconds: 2),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+    ));
+
     try {
-      final bool wasFav = course['is_favorite'] == true || course['isFavorite'] == true;
-      final bool isFav = !wasFav;
-      
-      setState(() {
-        course['is_favorite'] = isFav;
-        course['isFavorite'] = isFav;
-      });
-      
-      await wp.toggleFavorite(cid);
-      await _fetch();
-      
-      if (mounted) {
-        showDialog(
-          context: context,
-          builder: (context) => AlertDialog(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const SizedBox(height: 24),
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(color: Colors.green.withOpacity(0.1), shape: BoxShape.circle),
-                  child: const Icon(Icons.check_circle_rounded, color: Colors.green, size: 48),
-                ),
-                const SizedBox(height: 24),
-                Text(lang.translate('success') ?? 'Success!', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18)),
-                const SizedBox(height: 8),
-                Text(isFav ? (lang.translate('added_to_favorites') ?? 'Added to favorites successfully.') : (lang.translate('removed_from_favorites') ?? 'Removed from favorites.'), textAlign: TextAlign.center, style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6))),
-                const SizedBox(height: 24),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(backgroundColor: Theme.of(context).primaryColor, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)), padding: const EdgeInsets.symmetric(vertical: 16)),
-                    onPressed: () {
-                      Navigator.pop(context);
-                      _fetch();
-                    },
-                    child: Text(lang.translate('confirm') ?? 'OK', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      }
+      await wp.toggleFavoriteOptimistic(cid);
     } catch (e) {
       if (mounted) {
-        showDialog(
-          context: context,
-          builder: (context) => AlertDialog(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const SizedBox(height: 24),
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(color: Colors.red.withOpacity(0.1), shape: BoxShape.circle),
-                  child: const Icon(Icons.error_rounded, color: Colors.red, size: 48),
-                ),
-                const SizedBox(height: 24),
-                Text(lang.translate('failure') ?? 'Error', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18)),
-                const SizedBox(height: 8),
-                Text(e.toString().replaceAll('Exception: ', ''), textAlign: TextAlign.center, style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6))),
-                const SizedBox(height: 24),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(backgroundColor: Colors.red, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)), padding: const EdgeInsets.symmetric(vertical: 16)),
-                    onPressed: () => Navigator.pop(context),
-                    child: Text(lang.translate('confirm') ?? 'OK', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(e.toString().replaceAll('Exception: ', '')),
+          backgroundColor: Colors.red.shade700,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        ));
       }
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
     }
   }
+      
+
+
 
   String _stripHtml(String? html) {
     if (html == null) return '';
@@ -304,7 +245,7 @@ class _CoursesScreenState extends State<CoursesScreen> {
                       final cid = int.tryParse(c['category_id']?.toString() ?? '0') ?? 0;
                       return cid == _selectedCategoryId;
                     }).toList();
-                    return _buildCourseCard(filtered[index], primaryColor, onSurface, context, lang);
+                    return _buildCourseCard(context, filtered[index], primaryColor, onSurface, lang);
                   },
                   childCount: _availableCourses.where((c) {
                     if (_selectedCategoryId == null) return true;
@@ -341,7 +282,8 @@ class _CoursesScreenState extends State<CoursesScreen> {
     );
   }
 
-  Widget _buildCourseCard(Map<String, dynamic> course, Color primary, Color onSurface, BuildContext context, LanguageProvider lang) {
+  Widget _buildCourseCard(BuildContext context, Map<String, dynamic> course, Color primary, Color onSurface, LanguageProvider lang) {
+    final wp = Provider.of<WorkspaceProvider>(context);
     return Container(
       margin: const EdgeInsets.only(bottom: 20),
       decoration: BoxDecoration(
@@ -352,13 +294,7 @@ class _CoursesScreenState extends State<CoursesScreen> {
       ),
       child: InkWell(
         onTap: () {
-          final dynamic e = course['enrolled'] ?? course['is_enrolled'] ?? course['is_purchased'] ?? course['is_admitted'] ?? course['isEnrolled'];
-          final isEnrolled = e == true || e == 1 || e == '1' || e == 'true';
           final cid = int.tryParse(course['id']?.toString() ?? '0') ?? 0;
-          if (!isEnrolled) {
-            Navigator.pushNamed(context, '/subscribe', arguments: course);
-            return;
-          }
           if (cid > 0) Navigator.pushNamed(context, '/course', arguments: cid);
         },
         borderRadius: BorderRadius.circular(24),
@@ -381,18 +317,22 @@ class _CoursesScreenState extends State<CoursesScreen> {
                       child: Text("${course['price']} ${lang.translate('currency_le')}", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 13)),
                     ),
                   ),
-                  Positioned(
+                   Positioned(
                      top: 12, left: 12,
                      child: InkWell(
-                       onTap: _isLoading ? null : () => _toggleFavorite(course),
+                       onTap: () => _toggleFavorite(course), // always instant
                        child: Container(
                          padding: const EdgeInsets.all(8),
                          decoration: BoxDecoration(color: Colors.white, shape: BoxShape.circle, boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 4)]),
-                         child: Icon((course['is_favorite'] == true || course['isFavorite'] == true) ? Icons.favorite_rounded : Icons.favorite_border_rounded, color: (course['is_favorite'] == true || course['isFavorite'] == true) ? Colors.red : Colors.grey, size: 20),
-                       ),
+                         child: Icon(
+                           wp.localFavoriteIds.contains(int.tryParse(course['id']?.toString() ?? '0') ?? 0) ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+                           color: wp.localFavoriteIds.contains(int.tryParse(course['id']?.toString() ?? '0') ?? 0) ? Colors.red : Colors.grey,
+                           size: 20,
+                         ),
+                       ), 
                      ),
                   ),
-                ],
+                ],  
               ),
             ),
             Padding(
