@@ -15,12 +15,12 @@ if (localPropertiesFile.exists()) {
 
 def flutterVersionCode = localProperties.getProperty("flutter.versionCode")
 if (flutterVersionCode == null) {
-    flutterVersionCode = "17"
+    flutterVersionCode = "18"
 }
 
 def flutterVersionName = localProperties.getProperty("flutter.versionName")
 if (flutterVersionName == null) {
-    flutterVersionName = "17"
+    flutterVersionName = "18"
 }
 
 def keystoreProperties = new Properties()
@@ -58,12 +58,13 @@ android {
         applicationId = "com.omran_college.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 16
-        versionName = "1.0.14"
+        versionCode = 19
+        versionName = "1.0.9"
 
         externalNativeBuild {
             cmake {
                 arguments "-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON"
+                cppFlags "-Wl,-z,max-page-size=16384"
             }
             ndkBuild {
                 arguments "APP_SUPPORT_FLEXIBLE_PAGE_SIZES:=true"
