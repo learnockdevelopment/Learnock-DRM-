@@ -232,7 +232,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final primaryColor = Theme.of(context).primaryColor;
     return Column(
       children: [
-        if (workspace?.enablePurchasing ?? true)
+        if (wp.activeWorkspace?.enablePurchasing ?? true)
           SizedBox(width: double.infinity, height: 56, child: ElevatedButton(onPressed: () => Navigator.pushNamed(context, '/wallet'), style: ElevatedButton.styleFrom(backgroundColor: primaryColor, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)), elevation: 4, shadowColor: primaryColor.withOpacity(0.3)), child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [const Icon(Icons.stars_rounded, size: 20), const SizedBox(width: 10), Text((lang.translate('redeem_voucher') ?? 'CHARGE WALLET').toUpperCase(), style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 14, letterSpacing: 0.5))]))),
         const SizedBox(height: 12),
         InkWell(onTap: () => Navigator.pushNamed(context, '/favorites'), borderRadius: BorderRadius.circular(16), child: Container(height: 56, width: double.infinity, decoration: BoxDecoration(color: primaryColor.withOpacity(0.1), borderRadius: BorderRadius.circular(20)), child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.favorite_rounded, size: 20, color: primaryColor), const SizedBox(width: 10), Text((lang.translate('favorites') ?? 'FAVORITES').toUpperCase(), style: TextStyle(color: primaryColor, fontWeight: FontWeight.w900, fontSize: 14, letterSpacing: 0.5))]))),

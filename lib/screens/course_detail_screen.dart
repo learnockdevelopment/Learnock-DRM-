@@ -769,6 +769,7 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
 
   // ─── SUBSCRIBE BOTTOM BAR ─────────────────────────────────────────────────
   Widget _buildSubscribeBar(Map<String, dynamic> course, LanguageProvider lang, Color primaryColor, BuildContext context) {
+    final wp = Provider.of<WorkspaceProvider>(context, listen: false);
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
       decoration: BoxDecoration(
