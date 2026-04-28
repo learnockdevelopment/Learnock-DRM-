@@ -43,4 +43,12 @@ post_install do |installer|
       config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '13.0'
     end
   end
+
+  # Fix for Xcode 14.3+ PhaseScriptExecution failure (readlink -f issue)
+  frameworks_script = "Pods/Target Support Files/Pods-Runner/Pods-Runner-frameworks.sh"
+  if File.exist?(frameworks_script)
+    content = File.read(frameworks_script)
+    content.gsub!("readlink -f", "realpath")
+    File.write(frameworks_script, content)
+  end
 end
