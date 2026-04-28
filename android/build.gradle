@@ -26,9 +26,11 @@ subprojects {
                         cmake {
                             arguments "-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON"
                             cppFlags "-Wl,-z,max-page-size=16384"
+                            cFlags "-Wl,-z,max-page-size=16384"
                         }
                         ndkBuild {
                             arguments "APP_SUPPORT_FLEXIBLE_PAGE_SIZES:=true"
+                            arguments "APP_LDFLAGS:=-Wl,-z,max-page-size=16384"
                         }
                     }
                 }

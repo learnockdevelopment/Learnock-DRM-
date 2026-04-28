@@ -32,6 +32,7 @@ if (keystorePropertiesFile.exists()) {
 android {
     namespace = "com.omran_college.app"
     compileSdk = 36
+    buildToolsVersion = "35.0.0"
     ndkVersion = "28.2.13676358"
 
     signingConfigs {
@@ -58,16 +59,18 @@ android {
         applicationId = "com.omran_college.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 19
+        versionCode = 21
         versionName = "1.0.9"
 
         externalNativeBuild {
             cmake {
                 arguments "-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON"
                 cppFlags "-Wl,-z,max-page-size=16384"
+                cFlags "-Wl,-z,max-page-size=16384"
             }
             ndkBuild {
                 arguments "APP_SUPPORT_FLEXIBLE_PAGE_SIZES:=true"
+                arguments "APP_LDFLAGS:=-Wl,-z,max-page-size=16384"
             }
         }
     }
