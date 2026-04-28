@@ -232,15 +232,16 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
+                                if (wp.activeWorkspace?.enablePurchasing ?? true)
+                                  Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(lang.translate('course_price') ?? 'COURSE PRICE', style: TextStyle(color: onSurface.withOpacity(0.4), fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1)),
+                                      Text("${widget.course['price'] ?? '0.00'} ${lang.translate('currency_le') ?? 'LE'}", style: TextStyle(color: primaryColor, fontSize: 20, fontWeight: FontWeight.w900)),
+                                    ],
+                                  ),
                                 Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(lang.translate('course_price') ?? 'COURSE PRICE', style: TextStyle(color: onSurface.withOpacity(0.4), fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1)),
-                                    Text("${widget.course['price'] ?? '0.00'} ${lang.translate('currency_le') ?? 'LE'}", style: TextStyle(color: primaryColor, fontSize: 20, fontWeight: FontWeight.w900)),
-                                  ],
-                                ),
-                                Column(
-                                  crossAxisAlignment: CrossAxisAlignment.end,
+                                  crossAxisAlignment: (wp.activeWorkspace?.enablePurchasing ?? true) ? CrossAxisAlignment.end : CrossAxisAlignment.start,
                                   children: [
                                     Text(lang.translate('materials_count') ?? 'MODULES', style: TextStyle(color: onSurface.withOpacity(0.4), fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1)),
                                     Text("${widget.course['total_materials'] ?? 0}", style: TextStyle(color: onSurface, fontSize: 20, fontWeight: FontWeight.w900)),
@@ -259,29 +260,30 @@ class _SubscribeScreenState extends State<SubscribeScreen> {
                       
                       const SizedBox(height: 48),
                       
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton(
-                          onPressed: _handleWalletCheckout,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: primaryColor,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 20),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                            elevation: 0,
-                          ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              const Icon(Icons.wallet_rounded),
-                              const SizedBox(width: 12),
-                              Text(lang.translate('redeem_wallet') ?? 'Subscribe using Wallet', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900)),
-                            ],
+                      if (wp.activeWorkspace?.enablePurchasing ?? true) ...[
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton(
+                            onPressed: _handleWalletCheckout,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: primaryColor,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 20),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                              elevation: 0,
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const Icon(Icons.wallet_rounded),
+                                const SizedBox(width: 12),
+                                Text(lang.translate('redeem_wallet') ?? 'Subscribe using Wallet', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900)),
+                              ],
+                            ),
                           ),
                         ),
-                      ),
-
-                      const SizedBox(height: 24),
+                        const SizedBox(height: 24),
+                      ],
                       InkWell(
                         onTap: () => _showCodeDialog(context, isVoucher: false),
                         borderRadius: BorderRadius.circular(20),

@@ -309,14 +309,15 @@ class _CoursesScreenState extends State<CoursesScreen> {
                     height: 180, width: double.infinity, fit: BoxFit.cover,
                     errorBuilder: (c,e,s) => Container(height: 180, color: Theme.of(context).dividerColor, child: const Icon(Icons.school_rounded, size: 48)),
                   ),
-                  Positioned(
-                    top: 12, right: 12,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                      decoration: BoxDecoration(color: Colors.black.withOpacity(0.6), borderRadius: BorderRadius.circular(100)),
-                      child: Text("${course['price']} ${lang.translate('currency_le')}", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 13)),
+                  if (workspace?.enablePurchasing ?? true)
+                    Positioned(
+                      top: 12, right: 12,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(color: Colors.black.withOpacity(0.6), borderRadius: BorderRadius.circular(100)),
+                        child: Text("${course['price']} ${lang.translate('currency_le')}", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 13)),
+                      ),
                     ),
-                  ),
                    Positioned(
                      top: 12, left: 12,
                      child: InkWell(

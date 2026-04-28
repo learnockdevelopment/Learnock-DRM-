@@ -25,6 +25,7 @@ class Workspace {
   final String? faqsJson;
   final String? featuresJson;
   final String? latestCoursesJson;
+  final bool enablePurchasing;
 
   Workspace({
     required this.id,
@@ -47,6 +48,7 @@ class Workspace {
     this.faqsJson,
     this.featuresJson,
     this.latestCoursesJson,
+    this.enablePurchasing = true,
   });
 
   Map<String, dynamic> toJson() => {
@@ -70,6 +72,7 @@ class Workspace {
     'faqsJson': faqsJson,
     'featuresJson': featuresJson,
     'latestCoursesJson': latestCoursesJson,
+    'enablePurchasing': enablePurchasing,
   };
 
   Workspace copyWith({
@@ -93,6 +96,7 @@ class Workspace {
     String? faqsJson,
     String? featuresJson,
     String? latestCoursesJson,
+    bool? enablePurchasing,
   }) => Workspace(
     id: id ?? this.id,
     tenant: tenant ?? this.tenant,
@@ -114,6 +118,7 @@ class Workspace {
     faqsJson: faqsJson ?? this.faqsJson,
     featuresJson: featuresJson ?? this.featuresJson,
     latestCoursesJson: latestCoursesJson ?? this.latestCoursesJson,
+    enablePurchasing: enablePurchasing ?? this.enablePurchasing,
   );
 
   factory Workspace.fromJson(Map<String, dynamic> json) => Workspace(
@@ -137,5 +142,6 @@ class Workspace {
     faqsJson: json['faqsJson'],
     featuresJson: json['featuresJson'],
     latestCoursesJson: json['latestCoursesJson'],
+    enablePurchasing: json['enablePurchasing'] ?? true,
   );
 }

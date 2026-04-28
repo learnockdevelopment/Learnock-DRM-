@@ -440,7 +440,7 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
                         ),
                         const SizedBox(width: 8),
                       ],
-                      if (!isEnrolled) Container(
+                      if (!isEnrolled && (wp.activeWorkspace?.enablePurchasing ?? true)) Container(
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                         decoration: BoxDecoration(color: Colors.amber.withOpacity(0.12), borderRadius: BorderRadius.circular(6), border: Border.all(color: Colors.amber.withOpacity(0.25))),
                         child: Text('${course['price'] ?? '0'} ${lang.translate('currency_le') ?? 'LE'}', style: const TextStyle(color: Colors.amber, fontSize: 10, fontWeight: FontWeight.w900)),
@@ -779,53 +779,57 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // PRICE ROW
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text((lang.translate('course_price') ?? 'COURSE PRICE').toUpperCase(),
-                    style: TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1)),
-                Text("${course['price'] ?? '0.00'} ${lang.translate('currency_le') ?? 'LE'}",
-                    style: TextStyle(color: primaryColor, fontSize: 22, fontWeight: FontWeight.w900)),
-              ]),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                decoration: BoxDecoration(color: Colors.white.withOpacity(0.05), borderRadius: BorderRadius.circular(10)),
-                child: Row(children: [
-                  const Icon(Icons.lock_clock_rounded, color: Colors.white54, size: 14),
-                  const SizedBox(width: 6),
-                  Text((lang.translate('subscribe_to_unlock') ?? 'Subscribe to unlock').toUpperCase(),
-                      style: TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 8, fontWeight: FontWeight.w900, letterSpacing: 0.5)),
+          if (wp.activeWorkspace?.enablePurchasing ?? true) ...[
+            // PRICE ROW
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text((lang.translate('course_price') ?? 'COURSE PRICE').toUpperCase(),
+                      style: TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1)),
+                  Text("${course['price'] ?? '0.00'} ${lang.translate('currency_le') ?? 'LE'}",
+                      style: TextStyle(color: primaryColor, fontSize: 22, fontWeight: FontWeight.w900)),
                 ]),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          // WALLET BUTTON
-          SizedBox(
-            width: double.infinity,
-            height: 54,
-            child: ElevatedButton(
-              onPressed: _handleWalletCheckout,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: primaryColor,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                elevation: 0,
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(Icons.wallet_rounded, size: 20),
-                  const SizedBox(width: 10),
-                  Text(lang.translate('redeem_wallet') ?? 'Subscribe using Wallet',
-                      style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w900)),
-                ],
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(color: Colors.white.withOpacity(0.05), borderRadius: BorderRadius.circular(10)),
+                  child: Row(children: [
+                    const Icon(Icons.lock_clock_rounded, color: Colors.white54, size: 14),
+                    const SizedBox(width: 6),
+                    Text((lang.translate('subscribe_to_unlock') ?? 'Subscribe to unlock').toUpperCase(),
+                        style: TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 8, fontWeight: FontWeight.w900, letterSpacing: 0.5)),
+                  ]),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+          ],
+          if (wp.activeWorkspace?.enablePurchasing ?? true) ...[
+            // WALLET BUTTON
+            SizedBox(
+              width: double.infinity,
+              height: 54,
+              child: ElevatedButton(
+                onPressed: _handleWalletCheckout,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: primaryColor,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  elevation: 0,
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.wallet_rounded, size: 20),
+                    const SizedBox(width: 10),
+                    Text(lang.translate('redeem_wallet') ?? 'Subscribe using Wallet',
+                        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w900)),
+                  ],
+                ),
               ),
             ),
-          ),
-          const SizedBox(height: 10),
+            const SizedBox(height: 10),
+          ],
           // COUPON BUTTON
           SizedBox(
             width: double.infinity,

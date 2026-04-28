@@ -465,10 +465,12 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
                     children: [
                       Row(
                         children: [
-                          Expanded(child: _buildHeaderBox(context, lang.translate('wallet_balance').toUpperCase(), "${walletBalance} ${lang.translate('currency_le')}", Icons.account_balance_wallet_rounded, primaryColor, false, () {
-                            Navigator.pushNamed(context, '/wallet');
-                          })),
-                          const SizedBox(width: 12),
+                          if (workspace?.enablePurchasing ?? true) ...[
+                            Expanded(child: _buildHeaderBox(context, lang.translate('wallet_balance').toUpperCase(), "${walletBalance} ${lang.translate('currency_le')}", Icons.account_balance_wallet_rounded, primaryColor, false, () {
+                              Navigator.pushNamed(context, '/wallet');
+                            })),
+                            const SizedBox(width: 12),
+                          ],
                           Expanded(child: _buildHeaderBox(context, lang.translate('redeem_coupon').toUpperCase(), lang.translate('activate_now'), Icons.qr_code_scanner_rounded, primaryColor, true, () {
                             Navigator.pushNamed(context, '/onboarding');
                           })),
@@ -858,7 +860,8 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
                     child: Text((lang.translate('account') ?? 'ACCOUNT & BILLING').toUpperCase(), style: TextStyle(color: onSurface.withOpacity(0.3), fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1.5)),
                   ),
                   _buildSidebarAction(icon: Icons.person_rounded, title: lang.translate('profile'), onTap: () { Navigator.pop(context); Navigator.pushNamed(context, '/profile'); }, wsColor: wsColor),
-                  _buildSidebarAction(icon: Icons.account_balance_wallet_rounded, title: lang.translate('wallet_balance') ?? 'Academy Wallet', onTap: () { Navigator.pop(context); Navigator.pushNamed(context, '/wallet'); }, wsColor: wsColor),
+                  if (workspace?.enablePurchasing ?? true)
+                    _buildSidebarAction(icon: Icons.account_balance_wallet_rounded, title: lang.translate('wallet_balance') ?? 'Academy Wallet', onTap: () { Navigator.pop(context); Navigator.pushNamed(context, '/wallet'); }, wsColor: wsColor),
                   
                   const SizedBox(height: 32),
                   Row(

@@ -98,6 +98,7 @@ class WorkspaceProvider with ChangeNotifier {
           faqsJson: json.encode(settings?['faqs'] ?? []),
           featuresJson: json.encode(settings?['features'] ?? []),
           latestCoursesJson: json.encode(courses ?? []),
+          enablePurchasing: (settings?['enable_purchasing'] == 1 || settings?['enable_purchasing'] == true),
         );
         
         await _apiService.addWorkspace(updated);
