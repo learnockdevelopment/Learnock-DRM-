@@ -8,6 +8,7 @@ import 'package:learnock_drm/widgets/premium_loader.dart';
 import 'package:learnock_drm/models/workspace.dart';
 import 'dart:convert';
 import 'dart:io' as io;
+import 'package:learnock_drm/services/api_service.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -46,6 +47,19 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
     final theme = Provider.of<ThemeProvider>(context, listen: false);
     final workspace = wp.activeWorkspace;
     final activeId = workspace?.id;
+    
+    if (activeId == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          Navigator.of(context).pushNamedAndRemoveUntil(
+            '/onboarding', 
+            (route) => false, 
+            arguments: wp.lastErrorMessage
+          );
+        }
+      });
+      return;
+    }
     
     if (_lastWorkspaceId != activeId) {
       _lastWorkspaceId = activeId;
@@ -157,6 +171,15 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
       }
     } catch (e) {
       debugPrint('Fetch Error: $e');
+      if (e is DeviceMismatchException || e.toString().toLowerCase().contains('mismatch device id')) {
+        if (mounted) {
+           Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false, arguments: 'device_mismatch');
+        }
+      } else if (e.toString().contains('Session expired')) {
+        if (mounted) {
+           Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
+        }
+      }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -644,6 +667,37 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
     );
   }
 
+  Future<bool?> _showPremiumAlert(BuildContext context, {
+    required String title,
+    required String message,
+    required String confirmText,
+    required String cancelText,
+    bool isDestructive = false,
+  }) {
+    final onSurface = Theme.of(context).colorScheme.onSurface;
+    final onSurfaceVariant = Theme.of(context).colorScheme.onSurfaceVariant;
+    final primaryColor = Theme.of(context).primaryColor;
+    final lang = Provider.of<LanguageProvider>(context, listen: false);
+
+    return showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        backgroundColor: Theme.of(context).cardColor,
+        title: Text(title, style: TextStyle(fontWeight: FontWeight.w900, color: isDestructive ? const Color(0xFFEF4444) : onSurface, fontSize: 18)),
+        content: Text(message, style: TextStyle(color: onSurfaceVariant.withOpacity(0.7), fontSize: 14, height: 1.4)),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: Text(lang.translate('cancel') ?? 'CANCEL', style: const TextStyle(color: Color(0xFF94A3B8)))),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(backgroundColor: isDestructive ? const Color(0xFFEF4444) : primaryColor, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+            child: Text(confirmText),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildSaaSCourseCard(Map<String, dynamic> course, int index, LanguageProvider lang, Color wsColor, bool isRTL) {
     final wp = Provider.of<WorkspaceProvider>(context);
     final onSurface = Theme.of(context).colorScheme.onSurface;
@@ -935,7 +989,7 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: InkWell(
-        onTap: () { 
+        onTap: () async { 
           Navigator.pop(context); 
           // Reload all as requested
           setState(() { 
@@ -943,7 +997,7 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
             _dashboardData = null; 
             _lastWorkspaceId = null; 
           });
-          wp.switchWorkspace(w.id, context); 
+          await wp.switchWorkspace(w.id, context); 
         },
         borderRadius: BorderRadius.circular(16),
         child: Container(
@@ -964,7 +1018,33 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
                 Text(w.name.toUpperCase(), style: TextStyle(color: isSelected ? onSurface : onSurface.withOpacity(0.5), fontSize: 11, fontWeight: FontWeight.w900, letterSpacing: -0.2)),
                 Text(w.host.toLowerCase(), style: TextStyle(color: onSurface.withOpacity(0.3), fontSize: 9, fontWeight: FontWeight.bold)),
               ])),
-              if (isSelected) Container(width: 6, height: 6, decoration: BoxDecoration(color: wsColor, shape: BoxShape.circle)),
+              const SizedBox(width: 8),
+              IconButton(
+                onPressed: () async {
+                  final isLast = wp.workspaces.length == 1;
+                  final lang = Provider.of<LanguageProvider>(context, listen: false);
+                  final confirmed = await _showPremiumAlert(
+                    context,
+                    title: lang.translate('remove_academy') ?? 'REMOVE ACADEMY',
+                    message: lang.translate('remove_academy_confirm') ?? 'Are you sure you want to remove this academy from your device?',
+                    confirmText: lang.translate('remove') ?? 'REMOVE',
+                    cancelText: lang.translate('cancel') ?? 'CANCEL',
+                    isDestructive: true,
+                  );
+                  if (confirmed == true) {
+                    await wp.removeWorkspace(w.id);
+                    if (isLast) {
+                      if (context.mounted) Navigator.pushNamedAndRemoveUntil(context, '/onboarding', (route) => false);
+                    } else if (isSelected) {
+                      final next = wp.workspaces.first;
+                      await wp.switchWorkspace(next.id, context);
+                    }
+                  }
+                },
+                icon: Icon(Icons.delete_outline_rounded, color: const Color(0xFFEF4444).withOpacity(0.5), size: 18),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+              ),
             ],
           ),
         ), 

@@ -21,7 +21,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
+
   try {
     await NoScreenshot.instance.screenshotOff();
   } catch (e) {

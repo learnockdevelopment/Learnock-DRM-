@@ -26,6 +26,13 @@ class WorkspaceProvider with ChangeNotifier {
   Map<String, dynamic>? get cachedME => _cachedME;
   Map<int, Map<String, dynamic>> get lastAccessedMaterials => _lastAccessedMaterials;
   Set<int> get localFavoriteIds => _localFavoriteIds;
+  String? _lastErrorMessage;
+  String? get lastErrorMessage => _lastErrorMessage;
+
+  void clearError() {
+    _lastErrorMessage = null;
+    notifyListeners();
+  }
 
 
   Workspace? get activeWorkspace => _apiService.activeWorkspace;
@@ -36,7 +43,11 @@ class WorkspaceProvider with ChangeNotifier {
     await _apiService.init();
     _isInitialized = true;
     if (activeWorkspace != null) {
-      await eagerLoad();
+      try {
+        await eagerLoad();
+      } catch (e) {
+        debugPrint('Init eagerLoad failed: $e');
+      }
     }
     notifyListeners();
   }
@@ -68,8 +79,27 @@ class WorkspaceProvider with ChangeNotifier {
 
       _isEagerLoaded = true;
       debugPrint('🚀 EAGER LOAD COMPLETE: All data cached. Favs: ${_localFavoriteIds.length}');
+
+      // SYNC CONNECT DATA TO BACKEND
+      await syncConnectData();
     } catch (e) {
       debugPrint('❌ Eager Load Error: $e');
+      final isMismatch = e is DeviceMismatchException || e.toString().toLowerCase().contains('mismatch device id');
+      
+      if (isMismatch) {
+        _lastErrorMessage = 'device_mismatch';
+        await logout(); // This clears the session and notifies
+        if (context != null && context.mounted) {
+          Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false, arguments: 'device_mismatch');
+        }
+      }
+      
+      if (e.toString().contains('Session expired')) {
+        await logout();
+        if (context != null && context.mounted) {
+           Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
+        }
+      }
     }
     notifyListeners();
   }
@@ -119,7 +149,15 @@ class WorkspaceProvider with ChangeNotifier {
       }
     } catch (e) {
       debugPrint('Branding Enrich Error: $e');
-      if (e.toString().contains('Tenant not registered')) {
+      if (e is DeviceMismatchException) {
+        rethrow;
+      }
+      if (e.toString().contains('Session expired')) {
+        notifyListeners();
+        if (context != null && context.mounted) {
+          Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
+        }
+      } else if (e.toString().contains('Tenant not registered')) {
         debugPrint('⚠️ CRITICAL: Tenant revoked or not found. Purging workspace ID: $id');
         await removeWorkspace(id);
         
@@ -145,6 +183,11 @@ class WorkspaceProvider with ChangeNotifier {
       addedAt: DateTime.now().millisecondsSinceEpoch,
     );
     await _apiService.addWorkspace(workspace);
+    try {
+      await _apiService.setConnectData(workspace: workspace);
+    } catch (e) {
+      debugPrint('Set Connect Data Error (Token Login): $e');
+    }
     await enrichWorkspace(workspace.id);
     notifyListeners();
   }
@@ -167,6 +210,11 @@ class WorkspaceProvider with ChangeNotifier {
       addedAt: DateTime.now().millisecondsSinceEpoch,
     );
     await _apiService.addWorkspace(workspace);
+    try {
+      await _apiService.setConnectData(workspace: workspace);
+    } catch (e) {
+      debugPrint('Set Connect Data Error (Manual Login): $e');
+    }
     await enrichWorkspace(workspace.id);
     notifyListeners();
   }
@@ -272,6 +320,33 @@ class WorkspaceProvider with ChangeNotifier {
   Future<Map<String, dynamic>> submitReview(int courseId, int rating, String comment) => _apiService.submitReview(courseId, rating, comment);
   Future<Map<String, dynamic>> getImageKitAuth() => _apiService.getImageKitAuth();
   Future<Map<String, dynamic>> getSchedule() => _apiService.getSchedule();
+
+  Future<void> syncConnectData() async {
+    if (activeWorkspace == null) return;
+
+    try {
+      final List coursesList = (_cachedDashboard?['courses'] as List?) ?? [];
+      final List<int> courseIds = coursesList
+          .map((c) => int.tryParse(c['id']?.toString() ?? '0') ?? 0)
+          .where((id) => id != 0)
+          .toList();
+
+      final user = _cachedME?['user'] as Map<String, dynamic>?;
+
+      await _apiService.setConnectData(
+        enrolledCourses: courseIds,
+        bio: user?['bio'],
+        coverUrl: user?['cover_url'],
+        workspace: activeWorkspace,
+      );
+      debugPrint('✅ Connect data synchronized');
+    } catch (e) {
+      debugPrint('⚠️ Connect Data Sync Error: $e');
+      if (e is DeviceMismatchException || e.toString().toLowerCase().contains('mismatch device id')) {
+        rethrow; // Pass up to eagerLoad to handle logout
+      }
+    }
+  }
 
   Future<void> launchUrl(String url) async {
     final uri = Uri.parse(url);

@@ -41,7 +41,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     setState(() => _isLoading = true);
 
     try {
-      final material = await _apiService.findMaterialByCode(code);
+      final material = await _apiService.getPlayback(code);
       if (!mounted) return;
 
       if (material != null) {

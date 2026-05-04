@@ -1,5 +1,7 @@
 import 'dart:convert';
+import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:provider/provider.dart';
 import 'package:learnock_drm/providers/workspace_provider.dart';
@@ -8,6 +10,8 @@ import 'package:flutter_spinkit/flutter_spinkit.dart';
 import 'package:learnock_drm/widgets/premium_loader.dart';
 
 import '../models/workspace.dart';
+import '../services/api_service.dart';
+import 'error_screen.dart';
 
 class OnboardingScreen extends StatefulWidget {
   const OnboardingScreen({super.key});
@@ -19,6 +23,37 @@ class OnboardingScreen extends StatefulWidget {
 class _OnboardingScreenState extends State<OnboardingScreen> {
   bool _isManual = false;
   bool _isLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final wp = Provider.of<WorkspaceProvider>(context, listen: false);
+      final args = ModalRoute.of(context)?.settings.arguments;
+      
+      debugPrint('🔍 Onboarding init: args=$args, wp.lastErrorMessage=${wp.lastErrorMessage}');
+      
+      if (args == 'device_mismatch' || wp.lastErrorMessage == 'device_mismatch') {
+        debugPrint('🎯 TRIGGERING MISMATCH PROMPT');
+        wp.clearError();
+        
+        Future.delayed(const Duration(milliseconds: 500), () {
+          if (!mounted) return;
+          showDialog(
+            context: context,
+            barrierDismissible: false,
+            builder: (context) => _buildErrorPrompt(
+              context,
+              title: 'تنبيه الأمان',
+              message: 'تم تسجيل الخروج لأن هذا الحساب مفعل على جهاز آخر حالياً. يرجى استخدام جهازك الأساسي.',
+              icon: Icons.phonelink_lock_rounded,
+            ),
+          );
+        });
+      }
+    });
+  }
   final TextEditingController _hostController = TextEditingController();
   final TextEditingController _userController = TextEditingController();
   final TextEditingController _passController = TextEditingController();
@@ -58,9 +93,25 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       }
       throw 'Invalid QR Format';
     } catch (e) {
+      debugPrint('❌ QR LOGIN FAILED: $e');
       if (mounted) {
         setState(() => _isScanning = true);
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(Provider.of<LanguageProvider>(context, listen: false).translate('invalid_code'))));
+        setState(() => _isLoading = false);
+        
+        if (e is DeviceMismatchException || e.toString().toLowerCase().contains('mismatch device id')) {
+          showDialog(
+            context: context,
+            builder: (context) => _buildErrorPrompt(
+              context,
+              title: 'تنبيه الأمان',
+              message: 'عذراً، هذا الحساب مرتبط بجهاز آخر بالفعل. يرجى تسجيل الدخول من جهازك الأساسي.',
+              icon: Icons.phonelink_lock_rounded,
+            ),
+          );
+        } else {
+          final lang = Provider.of<LanguageProvider>(context, listen: false);
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(lang.translate('invalid_code'))));
+        }
       }
     }
   }
@@ -82,11 +133,34 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         _userController.text.trim(),
         _passController.text.trim(),
       );
+      debugPrint('✅ MANUAL LOGIN SUCCESS');
       if (mounted) Navigator.pushReplacementNamed(context, '/dashboard');
     } catch (e) {
+      debugPrint('❌ MANUAL LOGIN FAILED: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${lang.translate('login_failed')}: ${e.toString()}')));
-        setState(() => _isScanning = true);
+        if (e is DeviceMismatchException || e.toString().toLowerCase().contains('mismatch device id')) {
+          showDialog(
+            context: context,
+            builder: (context) => _buildErrorPrompt(
+              context,
+              title: 'تنبيه الأمان',
+              message: 'عذراً، هذا الحساب مرتبط بجهاز آخر بالفعل. يرجى تسجيل الدخول من جهازك الأساسي.',
+              icon: Icons.phonelink_lock_rounded,
+            ),
+          );
+        } else if (e is ServerException) {
+          Navigator.of(context).push(MaterialPageRoute(builder: (context) => ErrorScreen(
+            code: e.statusCode.toString(),
+            message: e.message,
+            onRetry: () {
+              Navigator.pop(context);
+              _loginManual();
+            },
+          )));
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${lang.translate('login_failed')}: ${e.toString()}')));
+          setState(() => _isScanning = true);
+        }
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -332,9 +406,96 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         trailing: Icon(Icons.arrow_forward_ios_rounded, size: 14, color: onSurface.withOpacity(0.2)),
         onTap: () async {
           setState(() => _isLoading = true);
-          await wp.switchWorkspace(w.id, context);
-          if (mounted) Navigator.pushReplacementNamed(context, '/dashboard');
+          try {
+            await wp.switchWorkspace(w.id, context);
+            if (mounted) Navigator.pushReplacementNamed(context, '/dashboard');
+          } catch (e) {
+            if (mounted) {
+              setState(() => _isLoading = false);
+              // eagerLoad already sets _lastErrorMessage and calls logout if mismatch
+              // But we might need to show the prompt here if eagerLoad didn't have context
+              if (e is DeviceMismatchException || e.toString().toLowerCase().contains('mismatch device id')) {
+                showDialog(
+                  context: context,
+                  builder: (context) => _buildErrorPrompt(
+                    context,
+                    title: 'تنبيه الأمان',
+                    message: 'عذراً، هذا الحساب مرتبط بجهاز آخر بالفعل.',
+                    icon: Icons.phonelink_lock_rounded,
+                  ),
+                );
+              }
+            }
+          }
         },
+      ),
+    );
+  }
+
+  Widget _buildErrorPrompt(BuildContext context, {required String title, required String message, required IconData icon}) {
+    return BackdropFilter(
+      filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+      child: Dialog(
+        backgroundColor: Colors.transparent,
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: const Color(0xFF0F172A).withOpacity(0.9),
+            borderRadius: BorderRadius.circular(32),
+            border: Border.all(color: Colors.white10),
+            boxShadow: [
+              BoxShadow(color: Colors.black54, blurRadius: 40, spreadRadius: 10)
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF43F5E).withOpacity(0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(icon, color: const Color(0xFFF43F5E), size: 40),
+              ),
+              const SizedBox(height: 24),
+              Text(
+                title,
+                style: GoogleFonts.cairo(
+                  color: Colors.white,
+                  fontSize: 22,
+                  fontWeight: FontWeight.w900,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 12),
+              Text(
+                message,
+                style: GoogleFonts.cairo(
+                  color: Colors.white60,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 32),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () => Navigator.pop(context),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFF43F5E),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    elevation: 0,
+                  ),
+                  child: Text('فهمت', style: GoogleFonts.cairo(fontWeight: FontWeight.bold)),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

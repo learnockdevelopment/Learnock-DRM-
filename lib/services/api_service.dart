@@ -4,8 +4,30 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:learnock_drm/models/workspace.dart';
 import 'package:learnock_drm/models/app_state.dart';
 import 'package:uuid/uuid.dart';
-import 'package:package_info_plus/package_info_plus.dart';
 import 'dart:io';
+import 'package:device_info_plus/device_info_plus.dart';
+
+class SessionExpiredException implements Exception {
+  final String message;
+  SessionExpiredException([this.message = 'Session expired']);
+  @override
+  String toString() => message;
+}
+
+class ServerException implements Exception {
+  final String message;
+  final int statusCode;
+  ServerException(this.message, this.statusCode);
+  @override
+  String toString() => message;
+}
+
+class DeviceMismatchException implements Exception {
+  final String message;
+  DeviceMismatchException([this.message = 'mismatch device id']);
+  @override
+  String toString() => message;
+}
 
 class ApiService {
   final _storage = const FlutterSecureStorage();
@@ -133,17 +155,57 @@ class ApiService {
     }
 
     print('<<< Status: ${response.statusCode}');
-    if (response.statusCode == 401) throw Exception('Session expired');
+    if (response.statusCode == 401) {
+      await clearSession();
+      throw SessionExpiredException();
+    }
 
     final data = json.decode(response.body);
+    final errorMsg = (data['error'] ?? data['message'] ?? '').toString().toLowerCase();
+    if (errorMsg.contains('mismatch device id')) throw DeviceMismatchException();
+    
+    if (response.statusCode >= 500) throw ServerException(data['message'] ?? 'Internal Server Error', response.statusCode);
     if (response.statusCode >= 400) throw Exception(data['error'] ?? data['message'] ?? 'API Error');
     return data;
   }
 
   Future<Map<String, dynamic>> login(String host, String email, String password) async {
       final uri = Uri.https(host, '/api/auth/login');
-      print('>>> POST $uri');
-      print('>>> Email: $email');
+      
+      final DeviceInfoPlugin deviceInfo = DeviceInfoPlugin();
+      String model = 'unknown';
+      String os = Platform.isAndroid ? 'Android' : (Platform.isIOS ? 'iOS' : 'unknown');
+      String osVersion = 'unknown';
+      String manufacturer = 'unknown';
+
+      if (Platform.isAndroid) {
+        final androidInfo = await deviceInfo.androidInfo;
+        model = androidInfo.model;
+        osVersion = androidInfo.version.release;
+        manufacturer = androidInfo.manufacturer;
+      } else if (Platform.isIOS) {
+        final iosInfo = await deviceInfo.iosInfo;
+        model = iosInfo.utsname.machine;
+        osVersion = iosInfo.systemVersion;
+        manufacturer = 'Apple';
+      }
+
+      final body = {
+        'email': email,
+        'password': password,
+        'device_id': deviceId,
+        'hwid': deviceId,
+        'device_model': model,
+        'device_os': os,
+        'device_os_version': osVersion,
+        'device_manufacturer': manufacturer,
+        'device_assigned_at': DateTime.now().toIso8601String(),
+        'last_device_change_at': DateTime.now().toIso8601String(),
+      };
+
+      print('-----------------------------------------');
+      print('🚀 LOGIN API CALL (MOBILE): $uri');
+      print('📦 BODY: ${json.encode(body)}');
       
       final response = await http.post(
         uri,
@@ -152,16 +214,20 @@ class ApiService {
           'Accept': 'application/json',
           'Content-Type': 'application/json',
         },
-        body: json.encode({
-          'email': email,
-          'password': password,
-        }),
+        body: json.encode(body),
       );
 
-      print('<<< Status: ${response.statusCode}');
-      print('<<< Body: ${response.body}');
+      print('-----------------------------------------');
+      print('🚀 LOGIN API CALL: $uri');
+      print('📥 STATUS: ${response.statusCode}');
+      print('📦 RESPONSE: ${response.body}');
+      print('-----------------------------------------');
 
       final data = json.decode(response.body);
+      final errorMsg = (data['error'] ?? data['message'] ?? '').toString().toLowerCase();
+      if (errorMsg.contains('mismatch device id')) throw DeviceMismatchException();
+
+      if (response.statusCode >= 500) throw ServerException(data['message'] ?? 'Login server error', response.statusCode);
       if (response.statusCode != 200) {
         throw Exception(data['error'] ?? 'Login failed');
       }
@@ -241,7 +307,7 @@ class ApiService {
   }
 
   Future<Map<String, dynamic>> getWalletTransactions() async {
-    return await request('GET', '/wallet/transactions');
+    return await request('GET', '/wallet/status');
   }
 
   Future<Map<String, dynamic>> getWalletBalance() async {
@@ -292,5 +358,50 @@ class ApiService {
   // REVISED FLOW: /api/schedule
   Future<Map<String, dynamic>> getSchedule() async {
     return await request('GET', '/schedule');
+  }
+
+  Future<void> setConnectData({
+    List<int>? enrolledCourses,
+    String? bio,
+    String? coverUrl,
+    Workspace? workspace,
+  }) async {
+    final DeviceInfoPlugin deviceInfo = DeviceInfoPlugin();
+    String model = 'unknown';
+    String os = Platform.isAndroid ? 'Android' : (Platform.isIOS ? 'iOS' : 'unknown');
+    String osVersion = 'unknown';
+    String manufacturer = 'unknown';
+
+    if (Platform.isAndroid) {
+      final androidInfo = await deviceInfo.androidInfo;
+      model = androidInfo.model;
+      osVersion = androidInfo.version.release;
+      manufacturer = androidInfo.manufacturer;
+    } else if (Platform.isIOS) {
+      final iosInfo = await deviceInfo.iosInfo;
+      model = iosInfo.utsname.machine;
+      osVersion = iosInfo.systemVersion;
+      manufacturer = 'Apple';
+    }
+
+    final body = {
+      'hwid': deviceId,
+      'device_model': model,
+      'device_os': os,
+      'device_os_version': osVersion,
+      'device_manufacturer': manufacturer,
+      'device_assigned_at': DateTime.now().toIso8601String(),
+      'last_device_change_at': DateTime.now().toIso8601String(),
+      'enrolled_courses': enrolledCourses ?? [],
+      'bio': bio ?? '',
+      'cover_url': coverUrl ?? '',
+    };
+
+    print('-----------------------------------------');
+    print('📱 SYNC DEVICE DATA (MOBILE API): /auth/mobile/set-connect-data');
+    print('📦 PAYLOAD: ${json.encode(body)}');
+    print('-----------------------------------------');
+
+    await request('POST', '/auth/mobile/set-connect-data', body: body, overrideWorkspace: workspace);
   }
 }

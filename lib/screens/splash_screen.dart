@@ -81,7 +81,10 @@ class _SplashScreenState extends State<SplashScreen>
         Provider.of<ThemeProvider>(context, listen: false).setTenant(w.theme, themeColor: w.themeColor);
         Navigator.of(context).pushReplacementNamed('/dashboard');
       } else {
-        Navigator.of(context).pushReplacementNamed('/onboarding');
+        Navigator.of(context).pushReplacementNamed(
+          '/onboarding', 
+          arguments: wp.lastErrorMessage
+        );
       }
     }
   }
